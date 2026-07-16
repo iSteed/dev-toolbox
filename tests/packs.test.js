@@ -294,6 +294,13 @@ function throws(fn, substr) {
     const plain = out(run('cookie-parser', 'a=1; b=2; c=3'));
     assert(plain.includes('a') && plain.includes('b'), 'plain cookie header');
   });
+  check('cookie-parser: builds a Set-Cookie header from field lines', () => {
+    const built = out(run('cookie-parser', 'name: session\nvalue: abc123\npath: /\nmax-age: 3600\nhttponly: true\nsamesite: Lax'));
+    assert(built === 'session=abc123; Path=/; Max-Age=3600; SameSite=Lax; HttpOnly', built);
+    throws(() => run('cookie-parser', 'value: abc123'), 'name');
+    const roundTrip = out(run('cookie-parser', built));
+    assert(roundTrip.includes('session') && roundTrip.includes('No Secure'), 'round-trip through decode: ' + roundTrip);
+  });
 
   check('query-string: decode and build', () => {
     assert(out(run('query-string', 'https://x.com/?a=1&b=two')).includes('two'), 'decode');

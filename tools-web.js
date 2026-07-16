@@ -811,7 +811,29 @@
     },
 
     'cookie-parser'(value) {
-      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header value.');
+      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header, or "name: value" field lines to build one.');
+      const fieldLine = /^(name|value|path|domain|max-age|expires|samesite|httponly|secure)\s*:/im;
+      if (fieldLine.test(input.split('\n')[0])) {
+        const fields = {};
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          fields[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+        }
+        if (!fields.name) throw new Error('A "name:" line is required to build a cookie.');
+        const truthy = (v) => v && !/^(false|0|no|off)$/i.test(v);
+        const parts = [`${fields.name}=${fields.value || ''}`];
+        if (fields.path) parts.push(`Path=${fields.path}`);
+        if (fields.domain) parts.push(`Domain=${fields.domain}`);
+        if (fields['max-age']) parts.push(`Max-Age=${fields['max-age']}`);
+        if (fields.expires) parts.push(`Expires=${fields.expires}`);
+        if (fields.samesite) parts.push(`SameSite=${fields.samesite}`);
+        if (truthy(fields.httponly)) parts.push('HttpOnly');
+        if (truthy(fields.secure)) parts.push('Secure');
+        return { output: parts.join('; '), status: 'Built a Set-Cookie header from the field lines above.' };
+      }
       if (/^\s*set-cookie:/i.test(input) || /(;\s*(httponly|secure|samesite|max-age|expires|domain|path)\b)/i.test(input)) {
         const clean = input.replace(/^\s*set-cookie:\s*/i, '');
         const parts = clean.split(';').map(s => s.trim());
@@ -973,7 +995,7 @@
     'mime-lookup': 'An extension (png), filename (a.svg), or MIME type (text/css)…',
     'file-signature': 'Leading file bytes as hex: 89 50 4E 47…',
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
-    'cookie-parser': 'A Cookie or Set-Cookie header value…',
+    'cookie-parser': 'A Cookie/Set-Cookie header, or "name: value" field lines to build one…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
     'curl-builder': 'Line 1: METHOD url · then Header: value lines · then body: …',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
