@@ -306,6 +306,19 @@ function throws(fn, substr) {
     assert(r.includes("-H 'Content-Type: application/json'"), 'header');
     assert(r.includes(`-d '{"a":1}'`), 'body');
   });
+  check('curl-builder: reverse-parses a curl command', () => {
+    const parsed = out(run('curl-builder', `curl -X POST 'https://api.x.com/v1' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"a":1}'`));
+    assert(parsed === 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}', parsed);
+    const noMethod = out(run('curl-builder', "curl https://example.com -H 'X-Test: 1'"));
+    assert(noMethod.startsWith('GET https://example.com'), 'defaults to GET: ' + noMethod);
+    const impliedPost = out(run('curl-builder', "curl https://example.com -d 'x=1'"));
+    assert(impliedPost.startsWith('POST https://example.com'), 'defaults to POST with a body: ' + impliedPost);
+  });
+  check('curl-builder: round-trips build -> parse -> build', () => {
+    const built = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
+    const parsed = out(run('curl-builder', built));
+    assert(parsed === 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}', parsed);
+  });
 
   check('jwt-generate: builds decodable unsigned token', () => {
     const token = out(run('jwt-generate', '{"sub":"42","name":"Test"}')).split('\n')[0];

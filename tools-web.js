@@ -865,8 +865,33 @@
     },
 
     'curl-builder'(value) {
-      const lines = value.split('\n').map(l => l.trim()).filter(Boolean);
-      if (!lines.length) throw new Error('Line 1: METHOD url. Then header lines "Key: Value", and a "body: ..." line.');
+      const input = requireInput(value, 'Line 1: METHOD url. Then header lines "Key: Value", and a "body: ..." line — or paste a curl command to parse it.');
+      if (/^\s*curl\b/.test(input)) {
+        const joined = input.replace(/\\\r?\n/g, ' ');
+        const tokens = joined.match(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\S+/g) || [];
+        const unquote = (t) => {
+          if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'))) {
+            return t.slice(1, -1).replace(/\\(.)/g, '$1');
+          }
+          return t;
+        };
+        let method = null, url = null, body = null;
+        const headers = [];
+        for (let i = 1; i < tokens.length; i++) {
+          const t = unquote(tokens[i]);
+          if (t === '-X' || t === '--request') { method = unquote(tokens[++i]); continue; }
+          if (t === '-H' || t === '--header') { headers.push(unquote(tokens[++i])); continue; }
+          if (t === '-d' || t === '--data' || t === '--data-raw' || t === '--data-binary') { body = unquote(tokens[++i]); continue; }
+          if (t.startsWith('-')) continue;
+          if (!url) url = t;
+        }
+        if (!url) throw new Error('Could not find a URL in that curl command.');
+        if (!method) method = body !== null ? 'POST' : 'GET';
+        const out = [`${method.toUpperCase()} ${url}`, ...headers];
+        if (body !== null) out.push(`body: ${body}`);
+        return { output: out.join('\n'), status: `Parsed a ${method.toUpperCase()} curl command — edit and run again to rebuild it.` };
+      }
+      const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
       const first = lines[0].match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)$/i) || lines[0].match(/^(\S+)$/);
       if (!first) throw new Error('First line should be "METHOD url" or just a url.');
       const method = first[2] ? first[1].toUpperCase() : 'GET';
@@ -975,7 +1000,7 @@
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
     'cookie-parser': 'A Cookie or Set-Cookie header value…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
-    'curl-builder': 'Line 1: METHOD url · then Header: value lines · then body: …',
+    'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
     'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…'
   });
