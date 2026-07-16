@@ -253,6 +253,14 @@ function throws(fn, substr) {
     assert(text.includes('restart'), 'restart warning');
     assert(text.includes(':latest'), 'untagged image');
   });
+  check('compose-validator: builds a Compose file from service blocks', () => {
+    const built = out(run('compose-validator', 'service: web\nimage: nginx:1.27-alpine\nports: 8080:80\ndepends_on: api\nvolumes: site-data:/usr/share/nginx/html\n\nservice: api\nimage: node:20-alpine\nenvironment: NODE_ENV=production\nrestart: unless-stopped'));
+    assert(built.includes('web:') && built.includes('api:'), built);
+    assert(built.includes('site-data'), 'named volume collected: ' + built);
+    throws(() => run('compose-validator', 'service: web\nports: 8080:80'), 'image');
+    const validated = out(run('compose-validator', built));
+    assert(validated.includes('✓'), 'built file should validate clean:\n' + validated);
+  });
   check('cron-builder: parses and finds next runs', () => {
     const result = run('cron-builder', '*/15 9-17 * * MON-FRI');
     const text = out(result);
