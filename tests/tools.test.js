@@ -175,6 +175,14 @@ function throws(fn, substr) {
     throws(() => run('cidr-calculator', '10.0.0.256/24'), 'valid IPv4');
     throws(() => run('cidr-calculator', '10.0.0.0/33'), 'Prefix');
   });
+  check('cidr-calculator: builds smallest CIDR from a range', () => {
+    const exact = out(run('cidr-calculator', '192.168.1.128 - 192.168.1.159'));
+    assert(exact.includes('Smallest CIDR covering 192.168.1.128 - 192.168.1.159: 192.168.1.128/27'), exact);
+    assert(exact.includes('192.168.1.159'), 'broadcast shown');
+    const uneven = out(run('cidr-calculator', '10.0.0.5 - 10.0.0.9'));
+    assert(uneven.includes('10.0.0.0/28'), 'rounds up to smallest containing block: ' + uneven);
+    throws(() => run('cidr-calculator', '10.0.0.10 - 10.0.0.5'), 'before start');
+  });
   check('url-parser: components and query params', () => {
     const text = out(run('url-parser', examples['url-parser']));
     assert(text.includes('api.example.com'), 'host');
