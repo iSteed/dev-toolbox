@@ -1030,27 +1030,46 @@
 
     'url-parser'(value) {
       const input = requireInput(value, 'Paste a URL to break apart, or scheme/host/path field lines to build one.');
-      const fieldLine = /^(scheme|protocol|username|user|password|host|hostname|port|path|query|search|fragment|hash)\s*:/im;
+      const fieldLine = /^(scheme|protocol|username|user|password|host|hostname|port|path|query(\.\S+)?|search|fragment|hash)\s*:/im;
 
       if (fieldLine.test(input.split('\n')[0])) {
+        const known = ['scheme', 'protocol', 'username', 'user', 'password', 'host', 'hostname', 'port', 'path', 'query', 'search', 'fragment', 'hash'];
         const fields = {};
+        const params = [];
         for (const raw of input.split('\n')) {
           const line = raw.trim();
-          if (!line) continue;
+          if (!line || line.startsWith('#')) continue;
           const idx = line.indexOf(':');
           if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
           const key = line.slice(0, idx).trim().toLowerCase();
-          fields[key] = line.slice(idx + 1).trim();
+          const val = line.slice(idx + 1).trim();
+          if (key.startsWith('query.')) {
+            params.push([key.slice('query.'.length), val]);
+            continue;
+          }
+          if (!known.includes(key)) throw new Error(`Unknown field "${key}" — expected one of: ${known.join(', ')}, or query.<name>.`);
+          if (key in fields) throw new Error(`Duplicate "${key}:" line.`);
+          fields[key] = val;
         }
         const scheme = (fields.scheme || fields.protocol || 'https').replace(/:$/, '');
+        if (!/^[a-z][a-z0-9+.-]*$/i.test(scheme)) throw new Error(`Invalid scheme "${scheme}".`);
         const host = fields.host || fields.hostname;
         if (!host) throw new Error('A "host:" (or "hostname:") line is required to build a URL.');
+        if (/[\s/@?#\\]/.test(host)) throw new Error(`Invalid host "${host}".`);
+        if (fields.port && (!/^\d+$/.test(fields.port) || Number(fields.port) > 65535)) throw new Error(`Invalid port "${fields.port}".`);
         let built = `${scheme}://`;
-        if (fields.username) built += fields.password ? `${fields.username}:${fields.password}@` : `${fields.username}@`;
+        const username = fields.username || fields.user;
+        if (username) built += fields.password ? `${username}:${fields.password}@` : `${username}@`;
         built += host;
         if (fields.port) built += `:${fields.port}`;
         built += fields.path ? (fields.path.startsWith('/') ? fields.path : '/' + fields.path) : '/';
-        const query = fields.query || fields.search;
+        let query = fields.query || fields.search || '';
+        if (params.length) {
+          const sp = new URLSearchParams();
+          for (const [k, v] of params) sp.append(k, v);
+          query = query.replace(/^\?/, '');
+          query = query ? query + '&' + sp.toString() : sp.toString();
+        }
         if (query) built += query.startsWith('?') ? query : '?' + query;
         const fragment = fields.fragment || fields.hash;
         if (fragment) built += fragment.startsWith('#') ? fragment : '#' + fragment;
@@ -1067,16 +1086,24 @@
       }
       let url;
       try { url = new URL(parseable); } catch (e) { throw new Error('Not a valid URL: ' + parseable); }
+      if (!url.hostname) {
+        throw new Error(`"${url.protocol}" URLs have no host and cannot round-trip through field lines — paste an http(s)-style URL.`);
+      }
       const lines = [
         `scheme: ${url.protocol.replace(/:$/, '')}`,
         `username: ${url.username}`,
         `password: ${url.password}`,
         `host: ${url.hostname}`,
         `port: ${url.port}`,
-        `path: ${url.pathname}`,
-        `query: ${url.search.replace(/^\?/, '')}`,
-        `fragment: ${url.hash.replace(/^#/, '')}`
+        `path: ${url.pathname}`
       ];
+      const entries = [...url.searchParams.entries()];
+      if (entries.length) {
+        for (const [k, v] of entries) lines.push(`query.${k}: ${v}`);
+      } else {
+        lines.push('query: ');
+      }
+      lines.push(`fragment: ${url.hash.replace(/^#/, '')}`);
       if (notes.length) lines.push('', ...notes.map(n => '# ' + n));
       return { output: lines.join('\n'), status: `Decoded ${url.hostname} — edit a line and run again to rebuild the URL.` };
     },
