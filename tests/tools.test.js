@@ -312,12 +312,21 @@ function throws(fn, substr) {
     throws(() => run('random-string', '3'), 'between 4 and 256');
     throws(() => run('random-string', '32 klingon'), 'Unknown option');
   });
-  check('qr-generator: encodes and renders', () => {
-    const result = run('qr-generator', examples['qr-generator']);
+  await checkAsync('qr-generator: encodes and renders', async () => {
+    const result = await run('qr-generator', examples['qr-generator']);
     assert(result.format === 'qr', 'format flag');
     assert(result.output.includes('█') || result.output.includes('▀'), 'blocks rendered');
     assert(result.status.includes('QR version'), result.status);
-    throws(() => run('qr-generator', 'x'.repeat(999)), 'too long');
+    await run('qr-generator', 'x'.repeat(999)).then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('too long'), e.message)
+    );
+  });
+  await checkAsync('qr-generator: decode path needs a supporting browser', async () => {
+    await run('qr-generator', 'data:image/png;base64,iVBORw0KGgo=').then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('BarcodeDetector'), e.message)
+    );
   });
 
   // ---- every tool's example runs without throwing ----

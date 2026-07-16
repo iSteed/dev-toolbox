@@ -1588,8 +1588,27 @@
       return { output: result, status: `${length} characters from the ${charsetName} charset (~${bits} bits of entropy).` };
     },
 
-    'qr-generator'(value) {
-      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes).');
+    async 'qr-generator'(value) {
+      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes) — or paste a data:image URL to decode a QR code from it.');
+      if (/^data:image\//i.test(input.trim())) {
+        if (typeof document === 'undefined' || typeof window === 'undefined' || !('BarcodeDetector' in window)) {
+          throw new Error('QR decoding needs a browser with BarcodeDetector support (Chrome, Edge, or similar) — this one does not have it.');
+        }
+        const img = new Image();
+        const loaded = new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Could not load that image data.'));
+        });
+        img.src = input.trim();
+        await loaded;
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const results = await detector.detect(img);
+        if (!results.length) throw new Error('No QR code found in that image.');
+        return {
+          output: results[0].rawValue,
+          status: results.length > 1 ? `Decoded ${results.length} QR codes — showing the first.` : 'Decoded the QR code.'
+        };
+      }
       const { modules, version, size } = QR.encodeText(input);
       return {
         output: QR.toHalfBlocks(modules),
@@ -1652,7 +1671,7 @@
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
     'timestamp-converter': 'Unix seconds/milliseconds or an ISO date — empty for “now”…',
     'random-string': 'Length and charset, e.g. "48 hex" (alnum, hex, url, ascii, digits)…',
-    'qr-generator': 'Text or URL to encode as a QR code…'
+    'qr-generator': 'Text or URL to encode as a QR code — or paste/screenshot a QR image to decode it…'
   };
 
   const ToolKit = {

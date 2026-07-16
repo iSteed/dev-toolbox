@@ -26,7 +26,7 @@ const tools = [
   { id: 'passphrase-generator', name: 'Passphrase Generator', description: 'Build memorable word-based passphrases.', category: 'generators', icon: '⚿' },
   { id: 'lorem-ipsum', name: 'Lorem Ipsum', description: 'Generate placeholder words and paragraphs.', category: 'generators', icon: '¶' },
   { id: 'luhn-check', name: 'Luhn / Test Cards', description: 'Validate or generate Luhn card numbers.', category: 'generators', icon: '⊞' },
-  { id: 'qr-generator', name: 'QR Generator', description: 'Render QR codes entirely client-side.', category: 'generators', icon: 'QR' },
+  { id: 'qr-generator', name: 'QR Generator', description: 'Render QR codes, or paste an image to decode.', category: 'generators', icon: 'QR' },
 
   // Encode pack (tools-encode.js)
   { id: 'base64', name: 'Base64', description: 'Encode or decode base64 and base64url.', category: 'encode', icon: 'b64' },
@@ -358,6 +358,20 @@ document.addEventListener('keydown', event => {
 
 input.addEventListener('input', scheduleLiveRun);
 runButton.addEventListener('click', runActiveTool);
+
+input.addEventListener('paste', (event) => {
+  if (activeToolId !== 'qr-generator') return;
+  const item = [...(event.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  event.preventDefault();
+  const file = item.getAsFile();
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = reader.result;
+    runActiveTool();
+  };
+  reader.readAsDataURL(file);
+});
 
 document.getElementById('clearTool').addEventListener('click', () => {
   input.value = '';
