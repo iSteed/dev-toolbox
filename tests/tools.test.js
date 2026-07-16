@@ -175,12 +175,23 @@ function throws(fn, substr) {
     throws(() => run('cidr-calculator', '10.0.0.256/24'), 'valid IPv4');
     throws(() => run('cidr-calculator', '10.0.0.0/33'), 'Prefix');
   });
-  check('url-parser: components and query params', () => {
+  check('url-parser: decodes into field lines', () => {
     const text = out(run('url-parser', examples['url-parser']));
-    assert(text.includes('api.example.com'), 'host');
-    assert(text.includes('8443'), 'port');
-    assert(text.includes('q') && text.includes('dev tools'), 'params decoded');
+    assert(text.includes('host: api.example.com'), 'host');
+    assert(text.includes('port: 8443'), 'port');
+    assert(text.includes('query: q=dev+tools&page=2&sort=stars'), 'query decoded');
     assert(out(run('url-parser', 'example.com/x')).includes('assumed https://'), 'scheme note');
+  });
+  check('url-parser: builds a URL from field lines', () => {
+    const built = out(run('url-parser', 'scheme: https\nhost: api.example.com\nport: 8443\npath: /v1/search\nquery: q=dev+tools&page=2'));
+    assert(built === 'https://api.example.com:8443/v1/search?q=dev+tools&page=2', built);
+    throws(() => run('url-parser', 'scheme: https\npath: /x'), 'host');
+  });
+  check('url-parser: round-trips decode -> edit -> build', () => {
+    const decoded = out(run('url-parser', examples['url-parser']));
+    const edited = decoded.replace('port: 8443', 'port: 9000');
+    const rebuilt = out(run('url-parser', edited));
+    assert(rebuilt.includes(':9000'), `expected edited port in ${rebuilt}`);
   });
   check('http-headers: annotates known and custom', () => {
     const result = run('http-headers', examples['http-headers']);

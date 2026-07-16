@@ -8,7 +8,7 @@ const tools = [
   { id: 'csp-builder', name: 'CSP Builder', description: 'Build a strict Content Security Policy.', category: 'security', icon: 'CSP' },
   { id: 'password-entropy', name: 'Password Entropy', description: 'Estimate strength and time to crack.', category: 'security', icon: '•••' },
   { id: 'cidr-calculator', name: 'CIDR Calculator', description: 'Calculate ranges, masks, and hosts.', category: 'network', icon: '/24' },
-  { id: 'url-parser', name: 'URL Parser', description: 'Break URLs into readable components.', category: 'network', icon: '://' },
+  { id: 'url-parser', name: 'URL Parser', description: 'Break a URL into fields, or build one from them.', category: 'network', icon: '://' },
   { id: 'http-headers', name: 'HTTP Header Inspector', description: 'Explain request and response headers.', category: 'network', icon: 'H' },
   { id: 'dns-lookup', name: 'DNS Lookup', description: 'Query live records via DNS-over-HTTPS.', category: 'network', icon: 'DNS' },
   { id: 'regex-tester', name: 'Regex Tester', description: 'Test expressions against sample text.', category: 'text', icon: '.*' },
