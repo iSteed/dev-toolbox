@@ -775,9 +775,17 @@
     },
 
     'file-signature'(value) {
-      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47).').trim();
+      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47), or a file type/extension to look up its signature.').trim();
       const compact = input.replace(/(0x|[\s,:])/gi, '').toLowerCase();
-      if (!/^[0-9a-f]+$/.test(compact) || compact.length < 2) throw new Error('Enter file bytes as hex, like "89 50 4E 47" or "ffd8ff".');
+      if (!/^[0-9a-f]+$/.test(compact) || compact.length < 2) {
+        const query = input.toLowerCase();
+        const hits = FILE_SIGNATURES.filter(([, name]) => name.toLowerCase().includes(query));
+        if (!hits.length) throw new Error(`No known file type matches "${input}". Enter hex bytes to identify a file, or a type name/extension to look up its signature.`);
+        return {
+          output: alignTable([['SIGNATURE', 'TYPE'], ...hits.map(([sig, name]) => [sig, name])]),
+          status: `${hits.length} known signature(s) matching "${input}".`
+        };
+      }
       const bytes = [];
       for (let i = 0; i + 1 < compact.length; i += 2) bytes.push(parseInt(compact.slice(i, i + 2), 16));
       const asHex = bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
@@ -971,7 +979,7 @@
     'ip-calculator': 'An IPv4 address to convert to int, hex, binary, IPv6…',
     'port-lookup': 'A port number (5432) or a keyword (redis, mail)…',
     'mime-lookup': 'An extension (png), filename (a.svg), or MIME type (text/css)…',
-    'file-signature': 'Leading file bytes as hex: 89 50 4E 47…',
+    'file-signature': 'Leading file bytes as hex: 89 50 4E 47 — or a type name like "png"…',
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
     'cookie-parser': 'A Cookie or Set-Cookie header value…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',

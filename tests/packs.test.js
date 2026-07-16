@@ -285,6 +285,13 @@ function throws(fn, substr) {
     assert(out(run('file-signature', 'ff d8 ff e0')).includes('JPEG'), 'jpeg');
     assert(out(run('file-signature', '50 4B 03 04')).includes('ZIP'), 'zip');
   });
+  check('file-signature: reverse lookup by type name', () => {
+    const png = out(run('file-signature', 'png'));
+    assert(png.includes('89 50 4E 47') && png.includes('PNG image'), png);
+    const zip = out(run('file-signature', 'zip'));
+    assert(zip.includes('50 4B 03 04'), zip);
+    throws(() => run('file-signature', 'not-a-real-format'), 'No known file type');
+  });
 
   check('cookie-parser: Set-Cookie flags + security notes', () => {
     const r = out(run('cookie-parser', 'Set-Cookie: id=abc; Path=/; Secure; HttpOnly; SameSite=Strict'));
