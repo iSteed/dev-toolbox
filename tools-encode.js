@@ -743,8 +743,24 @@
         const rnd = crypto.getRandomValues(new Uint8Array(size));
         return [...rnd].map(b => NANO_ALPHABET[b % 64]).join('');
       };
+      const trimmed = value.trim();
+      if (/^[0-9A-HJKMNP-TV-Z]{26}$/.test(trimmed)) {
+        const ms = trimmed.slice(0, 10).split('').reduce((acc, ch) => acc * 32 + CROCKFORD.indexOf(ch), 0);
+        const date = new Date(ms);
+        if (Number.isNaN(date.getTime())) throw new Error('That looks like a ULID, but its timestamp is not a valid date.');
+        return {
+          output: alignTable([
+            ['ULID', trimmed],
+            ['Timestamp (ms)', String(ms)],
+            ['Date (UTC)', date.toISOString()],
+            ['Relative', relativeTime(date)],
+            ['Randomness', trimmed.slice(10)]
+          ]),
+          status: `Decoded — created ${relativeTime(date)}.`
+        };
+      }
       const m = value.trim().toLowerCase().match(/^(\d+)?\s*(ulid|nanoid)?\s*(\d+)?$/);
-      if (!m) throw new Error('Formats: "5 ulid" · "5 nanoid" · "3 nanoid 12" (count, kind, size).');
+      if (!m) throw new Error('Formats: "5 ulid" · "5 nanoid" · "3 nanoid 12" (count, kind, size) — or paste a 26-char ULID to decode it.');
       const count = Math.min(100, Math.max(1, Number(m[1] ?? 1)));
       const kind = m[2];
       const size = Math.min(64, Math.max(4, Number(m[3] ?? 21)));
@@ -893,7 +909,7 @@
     'lorem-ipsum': '"3 paragraphs", "5 sentences", or "50 words"…',
     'passphrase-generator': 'Word count (3–16), optional separator: space, dash, dot…',
     'luhn-check': 'A card-style number to validate, or "generate 3" for test numbers…',
-    'id-generator': '"5 ulid" · "5 nanoid" · "3 nanoid 12"…'
+    'id-generator': '"5 ulid" · "5 nanoid" · "3 nanoid 12" — or paste a ULID to decode its timestamp…'
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ToolKit;
