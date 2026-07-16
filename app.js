@@ -17,7 +17,7 @@ const tools = [
   { id: 'slug-generator', name: 'Slug Generator', description: 'Create URL-safe slugs from text.', category: 'text', icon: '-' },
   { id: 'docker-linter', name: 'Dockerfile Linter', description: 'Check images against best practices.', category: 'devops', icon: 'D' },
   { id: 'compose-validator', name: 'Compose Validator', description: 'Validate Docker Compose structure.', category: 'devops', icon: 'DC' },
-  { id: 'cron-builder', name: 'Cron Builder', description: 'Explain cron expressions and preview runs.', category: 'devops', icon: '⏱' },
+  { id: 'cron-builder', name: 'Cron Builder', description: 'Build from field lines, or explain an expression.', category: 'devops', icon: '⏱' },
   { id: 'gitignore-builder', name: '.gitignore Builder', description: 'Combine templates for your stack.', category: 'devops', icon: 'git' },
   { id: 'uuid-generator', name: 'UUID Generator', description: 'Generate v4/v7 UUIDs, or inspect one.', category: 'generators', icon: 'ID' },
   { id: 'id-generator', name: 'ULID / NanoID', description: 'Generate sortable ULIDs and compact NanoIDs.', category: 'generators', icon: 'UL' },

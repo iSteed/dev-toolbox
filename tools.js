@@ -1395,8 +1395,29 @@
     },
 
     'cron-builder'(value) {
-      let expr = requireInput(value, 'Enter a cron expression, e.g. */15 9-17 * * MON-FRI').split('\n')[0].trim();
+      const input = requireInput(value, 'Enter a cron expression, e.g. */15 9-17 * * MON-FRI — or minute/hour/day/month/weekday field lines.');
+      const fieldLine = /^(minute|min|hour|day|dom|month|mon|weekday|dow|wday)\s*:/im;
+      let expr;
       const notes = [];
+      if (fieldLine.test(input.split('\n')[0])) {
+        const fields = {};
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          fields[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim() || '*';
+        }
+        const minute = fields.minute || fields.min || '*';
+        const hour = fields.hour || '*';
+        const dom = fields.day || fields.dom || '*';
+        const month = fields.month || fields.mon || '*';
+        const dow = fields.weekday || fields.dow || fields.wday || '*';
+        expr = [minute, hour, dom, month, dow].join(' ');
+        notes.push(`Built from field lines: ${expr}`);
+      } else {
+        expr = input.split('\n')[0].trim();
+      }
       if (expr.startsWith('@')) {
         if (expr === '@reboot') {
           return { output: '@reboot runs once at daemon startup — it has no schedule to expand.', status: 'Macro explained.' };
@@ -1611,7 +1632,7 @@
     'slug-generator': 'A title to convert into a URL-safe slug…',
     'docker-linter': 'Paste a Dockerfile…',
     'compose-validator': 'Paste a docker-compose.yml…',
-    'cron-builder': 'A 5-field cron expression, e.g. 0 3 * * SUN — or a macro like @daily…',
+    'cron-builder': 'A 5-field cron expression, a macro like @daily — or minute/hour/day/month/weekday field lines…',
     'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
     'timestamp-converter': 'Unix seconds/milliseconds or an ISO date — empty for “now”…',
