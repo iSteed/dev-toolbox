@@ -1215,7 +1215,35 @@
     },
 
     'docker-linter'(value) {
-      const source = requireInput(value, 'Paste a Dockerfile.');
+      const input = requireInput(value, 'Paste a Dockerfile, or "image: value" field lines to build one.');
+      const fieldLine = /^(image|from|workdir|copy|env|run|expose|cmd|entrypoint|user|label)\s*:/im;
+      if (fieldLine.test(input.split('\n')[0])) {
+        const image = [], workdir = [], copy = [], env = [], run = [], expose = [], cmd = [], entrypoint = [], user = [], label = [];
+        const bucket = { image, from: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label };
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const val = line.slice(idx + 1).trim();
+          if (!(key in bucket)) throw new Error(`Unknown field "${key}". Known: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label.`);
+          bucket[key].push(val);
+        }
+        if (!image.length) throw new Error('An "image:" (or "from:") line is required to build a Dockerfile.');
+        const out = [`FROM ${image[0]}`];
+        for (const l of label) out.push(`LABEL ${l}`);
+        if (workdir.length) out.push(`WORKDIR ${workdir[workdir.length - 1]}`);
+        for (const c of copy) out.push(`COPY ${c}`);
+        for (const e of env) out.push(`ENV ${e}`);
+        for (const r of run) out.push(`RUN ${r}`);
+        for (const e of expose) out.push(`EXPOSE ${e}`);
+        if (user.length) out.push(`USER ${user[user.length - 1]}`);
+        if (entrypoint.length) out.push(`ENTRYPOINT ${JSON.stringify(entrypoint[entrypoint.length - 1].split(/\s+/))}`);
+        if (cmd.length) out.push(`CMD ${JSON.stringify(cmd[cmd.length - 1].split(/\s+/))}`);
+        return { output: out.join('\n') + '\n', status: `Built a Dockerfile with ${out.length} instruction(s) — paste it back in to lint.` };
+      }
+      const source = input;
       const rawLines = source.split('\n');
       const instructions = [];
       for (let i = 0; i < rawLines.length; i++) {
@@ -1609,7 +1637,7 @@
     'case-converter': 'A phrase or identifier, e.g. userProfileSettings…',
     'text-diff': 'Original text, a line with only ---, then the changed text…',
     'slug-generator': 'A title to convert into a URL-safe slug…',
-    'docker-linter': 'Paste a Dockerfile…',
+    'docker-linter': 'Paste a Dockerfile to lint, or "image: value" field lines to build one…',
     'compose-validator': 'Paste a docker-compose.yml…',
     'cron-builder': 'A 5-field cron expression, e.g. 0 3 * * SUN — or a macro like @daily…',
     'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',

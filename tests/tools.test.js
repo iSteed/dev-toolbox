@@ -239,6 +239,16 @@ function throws(fn, substr) {
     const result = run('docker-linter', clean);
     assert(out(result).includes('No issues'), out(result));
   });
+  check('docker-linter: builds a Dockerfile from field lines', () => {
+    const built = out(run('docker-linter', 'image: node:20-alpine\nworkdir: /app\ncopy: . .\nrun: npm ci\nexpose: 8080\nuser: node\ncmd: npm start'));
+    assert(built.includes('FROM node:20-alpine'), built);
+    assert(built.includes('WORKDIR /app'), built);
+    assert(built.includes('CMD ["npm","start"]'), built);
+    assert(built.includes('USER node'), built);
+    throws(() => run('docker-linter', 'workdir: /app'), 'image');
+    const linted = out(run('docker-linter', built));
+    assert(!linted.includes('[error]') && !linted.includes('[warn]'), 'built file should have no error/warn lint issues:\n' + linted);
+  });
   check('compose-validator: valid example passes', () => {
     const result = run('compose-validator', examples['compose-validator']);
     assert(out(result).includes('✓'), out(result));
