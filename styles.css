@@ -273,6 +273,17 @@ kbd {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
 }
 
+.coffee-link {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.coffee-link:hover {
+  text-decoration: underline;
+}
+
 /* ---------- bench ---------- */
 
 .bench {
