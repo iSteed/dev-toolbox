@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dev Toolbox</title>
+  <meta name="description" content="70 developer utilities on one bench. Runs in your browser." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <button class="scrim" id="scrim" aria-label="Close tool list" tabindex="-1"></button>
+
+    <aside class="rail" id="rail">
+      <header class="brand-row">
+        <a class="brand" href="#" aria-label="Dev Toolbox">
+          <span class="brand-mark">&gt;_</span>
+          <span class="brand-name">dev<em>/</em>toolbox</span>
+        </a>
+        <button id="themeToggle" class="key-button" aria-label="Switch theme">☾</button>
+      </header>
+
+      <div class="search-row">
+        <input id="searchInput" type="search" placeholder="Search tools" autocomplete="off"
+               aria-label="Search tools" />
+        <kbd>/</kbd>
+      </div>
+
+      <nav id="toolList" class="tool-list" aria-label="Tools"></nav>
+
+      <footer class="rail-foot">
+        <span class="dot" aria-hidden="true"></span>
+        Runs locally in your browser
+      </footer>
+    </aside>
+
+    <main class="bench">
+      <header class="bench-head">
+        <button id="navToggle" class="key-button nav-toggle" aria-label="Show tool list">☰</button>
+        <div class="bench-title">
+          <h1 id="activeToolName">JSON Formatter</h1>
+          <p id="activeToolDescription">Format, validate, and pretty-print JSON.</p>
+        </div>
+        <div class="bench-meta">
+          <span id="toolCategory" class="badge">data</span>
+          <button id="favoriteButton" class="key-button" aria-label="Pin tool">☆</button>
+        </div>
+      </header>
+
+      <section class="pipeline">
+        <div class="pane">
+          <div class="pane-head">
+            <span class="pane-label">Input</span>
+            <span class="pane-tools">
+              <button id="loadExample" class="text-button">Example</button>
+              <button id="clearTool" class="text-button">Clear</button>
+            </span>
+          </div>
+          <textarea id="toolInput" spellcheck="false" placeholder="Paste input here"></textarea>
+        </div>
+
+        <div class="seam" aria-hidden="false">
+          <span class="pipe pipe-top"></span>
+          <button id="runTool" class="run-key" aria-label="Run tool">
+            <span class="run-glyph">▶</span>
+            <span class="run-word">run</span>
+          </button>
+          <span id="liveBadge" class="live-badge" title="This tool runs as you type">auto</span>
+          <span class="pipe pipe-bottom"></span>
+        </div>
+
+        <div class="pane">
+          <div class="pane-head">
+            <span class="pane-label">Output</span>
+            <span class="pane-tools">
+              <button id="swapOutput" class="text-button" title="Use this output as the next input">⇄ To input</button>
+              <button id="copyOutput" class="text-button">Copy</button>
+            </span>
+          </div>
+          <pre id="toolOutput" class="output" tabindex="0"></pre>
+        </div>
+      </section>
+
+      <footer class="bench-foot">
+        <p id="toolStatus" class="status" role="status">Ready.</p>
+        <span class="hint"><kbd>Ctrl</kbd><kbd>↵</kbd> run &nbsp;·&nbsp; <kbd>/</kbd> search</span>
+      </footer>
+    </main>
+  </div>
+
+  <script src="qr.js"></script>
+  <script src="tools.js"></script>
+  <script src="tools-encode.js"></script>
+  <script src="tools-web.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
