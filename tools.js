@@ -1400,20 +1400,28 @@
       let expr;
       const notes = [];
       if (fieldLine.test(input.split('\n')[0])) {
-        const fields = {};
+        const aliases = {
+          minute: 'minute', min: 'minute',
+          hour: 'hour',
+          day: 'dom', dom: 'dom',
+          month: 'month', mon: 'month',
+          weekday: 'dow', dow: 'dow', wday: 'dow'
+        };
+        const fields = Object.create(null);
         for (const raw of input.split('\n')) {
           const line = raw.trim();
           if (!line) continue;
           const idx = line.indexOf(':');
           if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
-          fields[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim() || '*';
+          const suppliedKey = line.slice(0, idx).trim().toLowerCase();
+          const key = aliases[suppliedKey];
+          if (!key) throw new Error(`Unknown cron field "${suppliedKey}". Known: minute/min, hour, day/dom, month/mon, weekday/dow/wday.`);
+          if (key in fields) throw new Error(`Cron field "${key}" is defined more than once.`);
+          const val = line.slice(idx + 1).trim();
+          if (!val) throw new Error(`Cron field "${suppliedKey}" needs a value (omit the line to default to *).`);
+          fields[key] = val;
         }
-        const minute = fields.minute || fields.min || '*';
-        const hour = fields.hour || '*';
-        const dom = fields.day || fields.dom || '*';
-        const month = fields.month || fields.mon || '*';
-        const dow = fields.weekday || fields.dow || fields.wday || '*';
-        expr = [minute, hour, dom, month, dow].join(' ');
+        expr = [fields.minute || '*', fields.hour || '*', fields.dom || '*', fields.month || '*', fields.dow || '*'].join(' ');
         notes.push(`Built from field lines: ${expr}`);
       } else {
         expr = input.split('\n')[0].trim();
