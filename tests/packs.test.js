@@ -301,6 +301,16 @@ function throws(fn, substr) {
     const roundTrip = out(run('cookie-parser', built));
     assert(roundTrip.includes('session') && roundTrip.includes('No Secure'), 'round-trip through decode: ' + roundTrip);
   });
+  check('cookie-parser: build mode rejects injection and invalid fields', () => {
+    throws(() => run('cookie-parser', 'name: session\nvalue: abc; Secure\nsecure: false'), 'semicolons');
+    throws(() => run('cookie-parser', 'name: se;ssion\nvalue: x'), 'invalid characters');
+    throws(() => run('cookie-parser', 'name: s\npath: /; Secure'), 'semicolons');
+    throws(() => run('cookie-parser', 'name: s\nunknown-field: x'), 'Unknown cookie field');
+    throws(() => run('cookie-parser', 'name: s\nvalue: 1\nvalue: 2'), 'more than once');
+    throws(() => run('cookie-parser', 'name: s\nsecure: flase'), 'must be true or false');
+    throws(() => run('cookie-parser', 'name: s\nsamesite: Sometimes'), 'Strict, Lax, or None');
+    throws(() => run('cookie-parser', 'name: s\nmax-age: tomorrow'), 'integer');
+  });
 
   check('query-string: decode and build', () => {
     assert(out(run('query-string', 'https://x.com/?a=1&b=two')).includes('two'), 'decode');
