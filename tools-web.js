@@ -1045,6 +1045,88 @@
         output: `${ip}  →  ${arpa}\n\n` + answers.map(a => '  ' + a.data).join('\n'),
         status: `${answers.length} PTR record(s) via Cloudflare DoH.`
       };
+    },
+
+    'semver-compare'(value) {
+      const input = requireInput(value, 'Versions one per line to sort — optionally a first line "range: ^2.3.0" to test them against.');
+      const parse = (v) => {
+        const m = v.trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/);
+        if (!m) throw new Error(`"${truncate(v.trim(), 30)}" is not a valid semver (MAJOR.MINOR.PATCH[-prerelease][+build]).`);
+        return { major: +m[1], minor: +m[2], patch: +m[3], pre: m[4] ? m[4].split('.') : [], raw: v.trim() };
+      };
+      // SemVer §11: numeric identifiers compare numerically and rank below
+      // alphanumeric ones; a version WITH a prerelease ranks below one without.
+      const cmp = (a, b) => {
+        if (a.major !== b.major) return a.major - b.major;
+        if (a.minor !== b.minor) return a.minor - b.minor;
+        if (a.patch !== b.patch) return a.patch - b.patch;
+        if (!a.pre.length && !b.pre.length) return 0;
+        if (!a.pre.length) return 1;
+        if (!b.pre.length) return -1;
+        for (let i = 0; i < Math.max(a.pre.length, b.pre.length); i++) {
+          const x = a.pre[i], y = b.pre[i];
+          if (x === undefined) return -1;
+          if (y === undefined) return 1;
+          const xn = /^\d+$/.test(x), yn = /^\d+$/.test(y);
+          if (xn && yn) { if (+x !== +y) return +x - +y; }
+          else if (xn) return -1;
+          else if (yn) return 1;
+          else if (x !== y) return x < y ? -1 : 1;
+        }
+        return 0;
+      };
+      const satisfies = (v, range) => {
+        // Space-separated comparators are ANDed, like npm: ">=3.0.0 <5.0.0".
+        return range.trim().split(/\s+/).every(part => {
+          let m;
+          if ((m = part.match(/^\^(.+)$/))) {
+            const base = parse(m[1]);
+            const upper = base.major > 0 ? { major: base.major + 1, minor: 0, patch: 0, pre: ['0'] }
+              : base.minor > 0 ? { major: 0, minor: base.minor + 1, patch: 0, pre: ['0'] }
+              : { major: 0, minor: 0, patch: base.patch + 1, pre: ['0'] };
+            return cmp(v, base) >= 0 && cmp(v, upper) < 0;
+          }
+          if ((m = part.match(/^~(.+)$/))) {
+            const base = parse(m[1]);
+            return cmp(v, base) >= 0 && cmp(v, { major: base.major, minor: base.minor + 1, patch: 0, pre: ['0'] }) < 0;
+          }
+          if ((m = part.match(/^(>=|<=|>|<|=)?(.+)$/))) {
+            const base = parse(m[2]);
+            const c = cmp(v, base);
+            switch (m[1] || '=') {
+              case '>=': return c >= 0;
+              case '<=': return c <= 0;
+              case '>': return c > 0;
+              case '<': return c < 0;
+              default: return c === 0;
+            }
+          }
+          throw new Error(`Cannot parse range part "${part}".`);
+        });
+      };
+      const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
+      let range = null;
+      if (/^range\s*:/i.test(lines[0])) range = lines.shift().replace(/^range\s*:/i, '').trim();
+      if (lines.length === 1 && !range) {
+        const only = parse(lines[0]);
+        const rows = [['Part', 'Value'], ['major', String(only.major)], ['minor', String(only.minor)], ['patch', String(only.patch)]];
+        if (only.pre.length) rows.push(['prerelease', only.pre.join('.')]);
+        return { output: alignTable(rows), status: `Parsed ${only.raw}.` };
+      }
+      const parsed = lines.map(parse);
+      const sorted = [...parsed].sort(cmp);
+      const out = [];
+      if (range) {
+        const rangeParse = (v) => { try { return satisfies(v, range); } catch (e) { throw e; } };
+        out.push(`Range: ${range}`, '');
+        for (const v of sorted) out.push(`  ${rangeParse(v) ? '✓' : '✗'}  ${v.raw}`);
+        const hits = sorted.filter(v => satisfies(v, range));
+        out.push('', hits.length ? `Highest satisfying: ${hits[hits.length - 1].raw}` : 'No version satisfies the range.');
+      } else {
+        out.push('Sorted (lowest → highest):', '', ...sorted.map(v => '  ' + v.raw));
+        if (sorted.some(v => v.pre.length)) out.push('', '• Prereleases rank below their release: 2.0.0-rc.1 < 2.0.0.');
+      }
+      return { output: out.join('\n'), status: range ? `${sorted.filter(v => satisfies(v, range)).length}/${sorted.length} satisfy ${range}.` : `${sorted.length} versions sorted; highest is ${sorted[sorted.length - 1].raw}.` };
     }
   };
 
@@ -1075,7 +1157,8 @@
     'query-string': 'https://example.com/search?q=dev+toolbox&page=2&sort=stars&tag=local',
     'curl-builder': 'POST https://api.example.com/v1/tools\nContent-Type: application/json\nAuthorization: Bearer TOKEN\nbody: {"name":"json-formatter"}',
     'jwt-generate': '{"sub":"1234567890","name":"Dev Toolbox","admin":true,"iat":1516239022,"exp":1893456000}',
-    'reverse-dns': '1.1.1.1'
+    'reverse-dns': '1.1.1.1',
+    'semver-compare': 'range: ^2.3.0\n2.2.9\n2.3.4\nv2.10.0-rc.1\n2.10.0\n3.0.0'
   });
 
   Object.assign(ToolKit.placeholders, {
@@ -1103,7 +1186,8 @@
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
     'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
-    'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…'
+    'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…',
+    'semver-compare': 'Versions one per line — optional first line "range: ^2.3.0" to test against…'
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ToolKit;
