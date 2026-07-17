@@ -327,6 +327,18 @@ function throws(fn, substr) {
     throws(() => run('cron-builder', '99 * * * *'), 'out of range');
     throws(() => run('cron-builder', '* * * * FUNDAY'), 'not a number');
   });
+  check('cron-builder: builds an expression from field lines', () => {
+    const text = out(run('cron-builder', 'minute: */15\nhour: 9-17\nweekday: MON-FRI'));
+    assert(text.includes('Built from field lines: */15 9-17 * * MON-FRI'), text);
+    assert(text.includes('MON-FRI'), 'table reflects built expression');
+    const allStar = out(run('cron-builder', 'hour: 3'));
+    assert(allStar.includes('Built from field lines: * 3 * * *'), 'missing fields default to *: ' + allStar);
+  });
+  check('cron-builder: field-line validation', () => {
+    throws(() => run('cron-builder', 'minute: 0\nhours: 9'), 'Unknown cron field');
+    throws(() => run('cron-builder', 'minute: 0\nmin: 30'), 'more than once');
+    throws(() => run('cron-builder', 'minute: 0\nhour:'), 'needs a value');
+  });
   check('gitignore-builder: combines and aliases', () => {
     const text = out(run('gitignore-builder', 'node, py, macos'));
     assert(text.includes('node_modules/') && text.includes('__pycache__/') && text.includes('.DS_Store'), text.slice(0, 120));
