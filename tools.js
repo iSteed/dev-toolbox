@@ -1002,9 +1002,26 @@
     },
 
     'cidr-calculator'(value) {
-      const input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24.').split('\n')[0].trim();
+      let input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24 — or an IP range "start - end" to find the smallest covering CIDR.').split('\n')[0].trim();
+      let rangeNote = null;
+      const rangeMatch = input.match(/^([\d.]+)\s*-\s*([\d.]+)$/);
+      if (rangeMatch) {
+        const startIp = ipToInt(rangeMatch[1], rangeMatch[1]);
+        const endIp = ipToInt(rangeMatch[2], rangeMatch[2]);
+        if (endIp < startIp) throw new Error(`Range end ${rangeMatch[2]} is before start ${rangeMatch[1]}.`);
+        let prefix = 32;
+        let network = startIp;
+        for (; prefix >= 0; prefix--) {
+          const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+          network = (startIp & mask) >>> 0;
+          const broadcast = (network | ~mask) >>> 0;
+          if (network <= startIp && broadcast >= endIp) break;
+        }
+        rangeNote = `Smallest CIDR covering ${rangeMatch[1]} - ${rangeMatch[2]}: ${intToIp(network)}/${prefix}`;
+        input = `${intToIp(network)}/${prefix}`;
+      }
       const m = input.match(/^([\d.]+)(?:\/(\d{1,2}))?$/);
-      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8.');
+      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8 — or an IP range "10.0.0.0 - 10.0.0.255".');
       const prefix = m[2] === undefined ? 32 : Number(m[2]);
       if (prefix > 32) throw new Error('Prefix length must be between 0 and 32.');
       const ip = ipToInt(m[1], m[1]);
@@ -1025,7 +1042,8 @@
         ['Total addresses', total.toLocaleString()],
         ['Range type', ipRangeNote(network)]
       ];
-      return { output: alignTable(rows), status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
+      const output = rangeNote ? `${rangeNote}\n\n${alignTable(rows)}` : alignTable(rows);
+      return { output, status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
     },
 
     'url-parser'(value) {
@@ -1335,7 +1353,53 @@
     },
 
     'compose-validator'(value) {
-      const source = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file.');
+      const input = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file, or "service: name" blocks to build one.');
+      if (/^service\s*:/im.test(input.split('\n')[0])) {
+        const blocks = input.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+        const services = Object.create(null);
+        const namedVolumes = new Set();
+        const KNOWN_FIELDS = new Set(['service', 'image', 'build', 'ports', 'volumes', 'environment', 'depends_on', 'depends-on', 'restart']);
+        for (const block of blocks) {
+          const fields = Object.create(null);
+          for (const raw of block.split('\n')) {
+            const line = raw.trim();
+            if (!line) continue;
+            const idx = line.indexOf(':');
+            if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+            const key = line.slice(0, idx).trim().toLowerCase();
+            if (!KNOWN_FIELDS.has(key)) throw new Error(`Unknown field "${key}". Known: service, image, build, ports, volumes, environment, depends_on, restart.`);
+            if (key in fields) throw new Error(`Field "${key}" appears more than once in the same service block.`);
+            fields[key] = line.slice(idx + 1).trim();
+          }
+          if (!fields.service) throw new Error('Each block needs a "service: name" line.');
+          if (fields.service in services) throw new Error(`Service "${fields.service}" is defined more than once.`);
+          const svc = {};
+          if (fields.image) svc.image = fields.image;
+          if (fields.build) svc.build = fields.build;
+          if (fields.ports) svc.ports = fields.ports.split(',').map(s => s.trim());
+          if (fields.volumes) {
+            svc.volumes = fields.volumes.split(',').map(s => s.trim());
+            for (const v of svc.volumes) {
+              const name = v.split(':')[0];
+              // Bind mounts (., /, $VAR, ~, or Windows drive letters) are not named volumes —
+              // same classification the validator below uses.
+              const isBind = !name || name.startsWith('.') || name.startsWith('/') || name.startsWith('$')
+                || name.startsWith('~') || /^[A-Za-z]$/.test(name) && /^[A-Za-z]:[\\/]/.test(v);
+              if (!isBind && v.includes(':')) namedVolumes.add(name);
+            }
+          }
+          if (fields.environment) svc.environment = fields.environment.split(',').map(s => s.trim());
+          if (fields.depends_on && fields['depends-on']) throw new Error('Use either "depends_on" or "depends-on", not both.');
+          if (fields.depends_on || fields['depends-on']) svc.depends_on = (fields.depends_on || fields['depends-on']).split(',').map(s => s.trim());
+          if (fields.restart) svc.restart = fields.restart;
+          if (!svc.image && !svc.build) throw new Error(`Service "${fields.service}" needs an "image:" or "build:" line.`);
+          services[fields.service] = svc;
+        }
+        const doc = { services };
+        if (namedVolumes.size) doc.volumes = Object.fromEntries([...namedVolumes].map(n => [n, null]));
+        return { output: yamlStringify(doc), status: `Built a Compose file with ${Object.keys(services).length} service(s) — paste it back in to validate.` };
+      }
+      const source = input;
       let doc;
       try { doc = yamlParse(source); } catch (e) { throw new Error('Not parseable as YAML — ' + e.message); }
       if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('A Compose file must be a YAML mapping at the top level.');
@@ -1600,8 +1664,37 @@
       return { output: result, status: `${length} characters from the ${charsetName} charset (~${bits} bits of entropy).` };
     },
 
-    'qr-generator'(value) {
-      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes).');
+    async 'qr-generator'(value) {
+      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes) — or paste a QR image to decode it.');
+      // Decode mode is explicit: the paste handler prefixes pasted images with "decode-image:".
+      // A bare data:image/... string is legitimate text and is encoded like any other.
+      if (/^decode-image:/i.test(input.trim())) {
+        const dataUrl = input.trim().replace(/^decode-image:/i, '');
+        if (!/^data:image\//i.test(dataUrl)) throw new Error('decode-image: must be followed by a data:image URL — paste a QR image into the input instead.');
+        if (typeof document === 'undefined' || typeof window === 'undefined' || !('BarcodeDetector' in window)) {
+          throw new Error('QR decoding needs a browser with BarcodeDetector support (Chrome, Edge, or similar) — this one does not have it.');
+        }
+        if (window.BarcodeDetector.getSupportedFormats) {
+          const formats = await window.BarcodeDetector.getSupportedFormats();
+          if (!formats.includes('qr_code')) {
+            throw new Error('This browser has BarcodeDetector but does not support the qr_code format.');
+          }
+        }
+        const img = new Image();
+        const loaded = new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Could not load that image data.'));
+        });
+        img.src = dataUrl;
+        await loaded;
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const results = await detector.detect(img);
+        if (!results.length) throw new Error('No QR code found in that image.');
+        return {
+          output: results[0].rawValue,
+          status: results.length > 1 ? `Decoded ${results.length} QR codes — showing the first.` : 'Decoded the QR code.'
+        };
+      }
       const { modules, version, size } = QR.encodeText(input);
       return {
         output: QR.toHalfBlocks(modules),
@@ -1649,7 +1742,7 @@
     'hash-generator': 'Text to hash — or key, a line with only ---, then the message (HMAC)…',
     'csp-builder': 'Optional: one "directive extra-sources" per line to extend the strict baseline…',
     'password-entropy': 'Type a password or passphrase (it never leaves this page)…',
-    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16…',
+    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16 — or a range "10.0.0.0 - 10.0.0.255"…',
     'url-parser': 'Paste a URL to break into fields, or "field: value" lines to build one…',
     'http-headers': 'Paste raw HTTP headers, one per line…',
     'dns-lookup': 'domain.tld, optionally followed by a type: example.com MX…',
@@ -1658,13 +1751,13 @@
     'text-diff': 'Original text, a line with only ---, then the changed text…',
     'slug-generator': 'A title to convert into a URL-safe slug…',
     'docker-linter': 'Paste a Dockerfile…',
-    'compose-validator': 'Paste a docker-compose.yml…',
+    'compose-validator': 'Paste a docker-compose.yml to validate, or "service: name" blocks to build one…',
     'cron-builder': 'A 5-field cron expression, e.g. 0 3 * * SUN — or a macro like @daily…',
     'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
     'timestamp-converter': 'Unix seconds/milliseconds or an ISO date — empty for “now”…',
     'random-string': 'Length and charset, e.g. "48 hex" (alnum, hex, url, ascii, digits)…',
-    'qr-generator': 'Text or URL to encode as a QR code…'
+    'qr-generator': 'Text or URL to encode as a QR code — or paste/screenshot a QR image to decode it…'
   };
 
   const ToolKit = {

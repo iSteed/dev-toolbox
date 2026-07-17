@@ -175,6 +175,18 @@ function throws(fn, substr) {
     throws(() => run('cidr-calculator', '10.0.0.256/24'), 'valid IPv4');
     throws(() => run('cidr-calculator', '10.0.0.0/33'), 'Prefix');
   });
+  check('cidr-calculator: builds smallest CIDR from a range', () => {
+    const exact = out(run('cidr-calculator', '192.168.1.128 - 192.168.1.159'));
+    assert(exact.includes('Smallest CIDR covering 192.168.1.128 - 192.168.1.159: 192.168.1.128/27'), exact);
+    assert(exact.includes('192.168.1.159'), 'broadcast shown');
+    const uneven = out(run('cidr-calculator', '10.0.0.5 - 10.0.0.9'));
+    assert(uneven.includes('10.0.0.0/28'), 'rounds up to smallest containing block: ' + uneven);
+    throws(() => run('cidr-calculator', '10.0.0.10 - 10.0.0.5'), 'before start');
+    const single = out(run('cidr-calculator', '10.0.0.5 - 10.0.0.5'));
+    assert(single.includes('10.0.0.5/32'), 'single IP -> /32: ' + single);
+    const whole = out(run('cidr-calculator', '0.0.0.0 - 255.255.255.255'));
+    assert(whole.includes('0.0.0.0/0'), 'full space -> /0: ' + whole);
+  });
   check('url-parser: decodes into field lines', () => {
     const text = out(run('url-parser', examples['url-parser']));
     assert(text.includes('host: api.example.com'), 'host');
@@ -278,6 +290,23 @@ function throws(fn, substr) {
     assert(text.includes('restart'), 'restart warning');
     assert(text.includes(':latest'), 'untagged image');
   });
+  check('compose-validator: builds a Compose file from service blocks', () => {
+    const built = out(run('compose-validator', 'service: web\nimage: nginx:1.27-alpine\nports: 8080:80\ndepends_on: api\nvolumes: site-data:/usr/share/nginx/html\n\nservice: api\nimage: node:20-alpine\nenvironment: NODE_ENV=production\nrestart: unless-stopped'));
+    assert(built.includes('web:') && built.includes('api:'), built);
+    assert(built.includes('site-data'), 'named volume collected: ' + built);
+    throws(() => run('compose-validator', 'service: web\nports: 8080:80'), 'image');
+    const validated = out(run('compose-validator', built));
+    assert(validated.includes('✓'), 'built file should validate clean:\n' + validated);
+  });
+  check('compose-validator: build mode volume classification and validation', () => {
+    const binds = out(run('compose-validator', 'service: app\nimage: alpine:3.20\nvolumes: ${DATA_DIR}:/data, ~/data:/home, C:\\data:/win, ./src:/src'));
+    assert(!binds.includes('volumes:\n') || !/^volumes:/m.test(binds), 'no top-level volumes for bind mounts:\n' + binds);
+    const named = out(run('compose-validator', 'service: app\nimage: alpine:3.20\nvolumes: cache:/var/cache'));
+    assert(/^volumes:/m.test(named) && named.includes('cache'), 'named volume still declared: ' + named);
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\n\nservice: web\nimage: b:1'), 'more than once');
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\nport: 8080:80'), 'Unknown field');
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\nimage: b:1'), 'more than once');
+  });
   check('cron-builder: parses and finds next runs', () => {
     const result = run('cron-builder', '*/15 9-17 * * MON-FRI');
     const text = out(result);
@@ -329,12 +358,29 @@ function throws(fn, substr) {
     throws(() => run('random-string', '3'), 'between 4 and 256');
     throws(() => run('random-string', '32 klingon'), 'Unknown option');
   });
-  check('qr-generator: encodes and renders', () => {
-    const result = run('qr-generator', examples['qr-generator']);
+  await checkAsync('qr-generator: encodes and renders', async () => {
+    const result = await run('qr-generator', examples['qr-generator']);
     assert(result.format === 'qr', 'format flag');
     assert(result.output.includes('█') || result.output.includes('▀'), 'blocks rendered');
     assert(result.status.includes('QR version'), result.status);
-    throws(() => run('qr-generator', 'x'.repeat(999)), 'too long');
+    await run('qr-generator', 'x'.repeat(999)).then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('too long'), e.message)
+    );
+  });
+  await checkAsync('qr-generator: decode path needs a supporting browser', async () => {
+    await run('qr-generator', 'decode-image:data:image/png;base64,iVBORw0KGgo=').then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('BarcodeDetector'), e.message)
+    );
+  });
+  await checkAsync('qr-generator: a literal data:image URL is encoded as text, not decoded', async () => {
+    const result = await run('qr-generator', 'data:image/png;base64,iVBORw0KGgo=');
+    assert(result.format === 'qr' && result.status.includes('QR version'), 'data URL encoded as QR payload: ' + result.status);
+    await run('qr-generator', 'decode-image:not-a-data-url').then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('data:image'), e.message)
+    );
   });
 
   // ---- every tool's example runs without throwing ----
