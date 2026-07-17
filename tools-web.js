@@ -920,8 +920,79 @@
     },
 
     'curl-builder'(value) {
-      const lines = value.split('\n').map(l => l.trim()).filter(Boolean);
-      if (!lines.length) throw new Error('Line 1: METHOD url. Then header lines "Key: Value", and a "body: ..." line.');
+      const input = requireInput(value, 'Line 1: METHOD url. Then header lines "Key: Value", and a "body: ..." line — or paste a curl command to parse it.');
+      if (/^\s*curl\b/.test(input)) {
+        const joined = input.replace(/\\\r?\n/g, ' ');
+        // Shell-faithful tokenizer: '...' is fully literal; in "..." a backslash
+        // only escapes \ " $ `; outside quotes it escapes the next character.
+        const tokens = [];
+        {
+          let cur = null;
+          for (let i = 0; i < joined.length; i++) {
+            const c = joined[i];
+            if (/\s/.test(c)) { if (cur !== null) { tokens.push(cur); cur = null; } continue; }
+            cur = cur ?? '';
+            if (c === "'") {
+              const end = joined.indexOf("'", i + 1);
+              if (end === -1) throw new Error('Unclosed single quote in the curl command.');
+              cur += joined.slice(i + 1, end);
+              i = end;
+            } else if (c === '"') {
+              i++;
+              for (; i < joined.length && joined[i] !== '"'; i++) {
+                if (joined[i] === '\\' && /["\\$`]/.test(joined[i + 1] || '')) { cur += joined[++i]; }
+                else cur += joined[i];
+              }
+              if (i >= joined.length) throw new Error('Unclosed double quote in the curl command.');
+            } else if (c === '\\') {
+              if (i + 1 < joined.length) cur += joined[++i];
+            } else {
+              cur += c;
+            }
+          }
+          if (cur !== null) tokens.push(cur);
+        }
+        // Options curl accepts that we understand: true = takes an argument.
+        const TAKES_ARG = {
+          '-X': true, '--request': true, '-H': true, '--header': true,
+          '-d': true, '--data': true, '--data-raw': true, '--data-binary': true, '--data-urlencode': true,
+          '--url': true
+        };
+        const IGNORED_FLAGS = new Set([
+          '-s', '--silent', '-S', '--show-error', '-v', '--verbose', '-L', '--location',
+          '-k', '--insecure', '--compressed', '-i', '--include', '-f', '--fail', '-g', '--globoff'
+        ]);
+        let method = null, url = null;
+        const bodies = [];
+        const headers = [];
+        for (let i = 1; i < tokens.length; i++) {
+          let t = tokens[i];
+          let inlineVal = null;
+          const eq = t.startsWith('--') ? t.indexOf('=') : -1;
+          if (eq !== -1) { inlineVal = t.slice(eq + 1); t = t.slice(0, eq); }
+          const nextArg = () => {
+            if (inlineVal !== null) return inlineVal;
+            if (++i >= tokens.length) throw new Error(`Option ${t} is missing its argument.`);
+            return tokens[i];
+          };
+          if (t === '-X' || t === '--request') { method = nextArg(); continue; }
+          if (t === '-H' || t === '--header') { headers.push(nextArg()); continue; }
+          if (t === '--url') { url = nextArg(); continue; }
+          if (t in TAKES_ARG) { bodies.push(nextArg()); continue; }
+          if (IGNORED_FLAGS.has(t)) continue;
+          if (t.startsWith('-')) {
+            throw new Error(`Unsupported curl option "${t}" — remove it, or supported options are -X, -H, -d/--data variants, and simple flags like -s/-L/-k.`);
+          }
+          if (url) throw new Error(`Found two possible URLs ("${url}" and "${t}").`);
+          url = t;
+        }
+        if (!url) throw new Error('Could not find a URL in that curl command.');
+        if (!method) method = bodies.length ? 'POST' : 'GET';
+        const out = [`${method.toUpperCase()} ${url}`, ...headers];
+        if (bodies.length) out.push(`body: ${bodies.join('&')}`); // curl joins repeated --data with &
+        return { output: out.join('\n'), status: `Parsed a ${method.toUpperCase()} curl command — edit and run again to rebuild it.` };
+      }
+      const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
       const first = lines[0].match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)$/i) || lines[0].match(/^(\S+)$/);
       if (!first) throw new Error('First line should be "METHOD url" or just a url.');
       const method = first[2] ? first[1].toUpperCase() : 'GET';
@@ -1030,7 +1101,7 @@
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
     'cookie-parser': 'A Cookie/Set-Cookie header, or "name: value" field lines to build one…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
-    'curl-builder': 'Line 1: METHOD url · then Header: value lines · then body: …',
+    'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
     'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…'
   });

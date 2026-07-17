@@ -74,7 +74,7 @@ const tools = [
   { id: 'status-code', name: 'HTTP Status Codes', description: 'Look up any HTTP status code.', category: 'network', icon: '2xx' },
   { id: 'cookie-parser', name: 'Cookie Parser', description: 'Break down a header, or build one from fields.', category: 'network', icon: '🍪' },
   { id: 'query-string', name: 'Query String', description: 'Decode or build URL query strings.', category: 'network', icon: '?=' },
-  { id: 'curl-builder', name: 'curl Builder', description: 'Assemble a curl command from parts.', category: 'network', icon: '$' },
+  { id: 'curl-builder', name: 'curl Builder', description: 'Assemble a curl command, or parse one back.', category: 'network', icon: '$' },
   { id: 'file-signature', name: 'File Signature', description: 'Identify a file, or look up a type’s magic bytes.', category: 'network', icon: '⌘' },
 
   // Security addition (tools-web.js)
