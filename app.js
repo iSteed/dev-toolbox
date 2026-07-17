@@ -304,7 +304,10 @@ function guiSpec(id = activeToolId) {
 
 function guiValues() {
   const values = {};
-  for (const el of guiForm.querySelectorAll('[data-key]')) values[el.dataset.key] = el.value;
+  // Disabled controls are excluded so stale slave-field values never serialize.
+  for (const el of guiForm.querySelectorAll('[data-key]')) {
+    if (!el.disabled) values[el.dataset.key] = el.value;
+  }
   return values;
 }
 
@@ -385,11 +388,16 @@ function setGuiMode(on) {
   input.hidden = guiOn;
   guiToggle.setAttribute('aria-pressed', String(guiOn));
   guiToggle.classList.toggle('pinned', guiOn);
+  guiToggle.setAttribute('aria-expanded', String(guiOn));
   if (guiOn) {
-    // Render, then hydrate the controls from the existing input — opening the
-    // form never changes what the runner receives.
+    // Render, hydrate from the existing input, then serialize back so form,
+    // input, and output agree from the first frame. Skipped when hydration
+    // couldn't represent a non-empty input (e.g. unparseable text) — syncing
+    // then would overwrite it with a blank form.
     renderGuiForm();
     guiHydrate();
+    const hydrated = Object.values(guiValues()).some(v => (v || '').trim());
+    if (hydrated || !input.value.trim()) guiSync();
   } else if (wasOn) {
     input.focus();
   }
