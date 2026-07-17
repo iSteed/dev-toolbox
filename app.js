@@ -370,8 +370,9 @@ function setGuiMode(on) {
   guiToggle.setAttribute('aria-pressed', String(guiOn));
   guiToggle.classList.toggle('pinned', guiOn);
   if (guiOn) {
+    // Render but don't serialize yet — the existing input (typed text or a
+    // previous form result) survives until the user changes a control.
     renderGuiForm();
-    guiSync();
   } else if (wasOn) {
     input.focus();
   }
