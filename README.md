@@ -84,3 +84,7 @@ node tests/packs.test.js   # exercises the encode + web tool packs
 node tests/qr.test.js      # compares qr.js against the python "qrcode"
                            # library bit-for-bit (skips if not installed)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
