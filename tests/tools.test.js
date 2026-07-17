@@ -276,6 +276,27 @@ function throws(fn, substr) {
     const result = run('docker-linter', clean);
     assert(out(result).includes('No issues'), out(result));
   });
+  check('docker-linter: builds a Dockerfile from field lines', () => {
+    const built = out(run('docker-linter', 'image: node:20-alpine\nworkdir: /app\ncopy: . .\nrun: npm ci\nexpose: 8080\nuser: node\ncmd: npm start'));
+    assert(built.includes('FROM node:20-alpine'), built);
+    assert(built.includes('WORKDIR /app'), built);
+    assert(built.includes('CMD ["npm","start"]'), built);
+    assert(built.includes('USER node'), built);
+    throws(() => run('docker-linter', 'workdir: /app'), 'image');
+    const linted = out(run('docker-linter', built));
+    assert(!linted.includes('[error]') && !linted.includes('[warn]'), 'built file should have no error/warn lint issues:\n' + linted);
+  });
+  check('docker-linter: build mode preserves order and validates fields', () => {
+    const built = out(run('docker-linter', 'image: alpine:3.20\nrun: pwd\nworkdir: /app\nrun: ls'));
+    const lines = built.trim().split('\n');
+    assert(lines.join('|') === 'FROM alpine:3.20|RUN pwd|WORKDIR /app|RUN ls', 'input order preserved: ' + built);
+    const json = out(run('docker-linter', 'image: alpine:3.20\ncmd: ["node", "-e", "console.log(\'hello world\')"]'));
+    assert(json.includes(`CMD ["node","-e","console.log('hello world')"]`), 'JSON array cmd: ' + json);
+    throws(() => run('docker-linter', 'image: alpine\ncmd: node -e "console.log(1)"'), 'JSON array');
+    throws(() => run('docker-linter', 'image:'), 'needs a value');
+    throws(() => run('docker-linter', 'image: a\nimage: b'), 'only be given once');
+    throws(() => run('docker-linter', 'image: a\ncmd: x\ncmd: y'), 'only be given once');
+  });
   check('compose-validator: valid example passes', () => {
     const result = run('compose-validator', examples['compose-validator']);
     assert(out(result).includes('✓'), out(result));

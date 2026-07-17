@@ -15,7 +15,7 @@ const tools = [
   { id: 'case-converter', name: 'Case Converter', description: 'Switch between common naming styles.', category: 'text', icon: 'Aa' },
   { id: 'text-diff', name: 'Text Diff', description: 'Compare two text blocks line by line.', category: 'text', icon: '±' },
   { id: 'slug-generator', name: 'Slug Generator', description: 'Create URL-safe slugs from text.', category: 'text', icon: '-' },
-  { id: 'docker-linter', name: 'Dockerfile Linter', description: 'Check images against best practices.', category: 'devops', icon: 'D' },
+  { id: 'docker-linter', name: 'Dockerfile Linter', description: 'Lint a Dockerfile, or build one from fields.', category: 'devops', icon: 'D' },
   { id: 'compose-validator', name: 'Compose Validator', description: 'Validate a Compose file, or build one.', category: 'devops', icon: 'DC' },
   { id: 'cron-builder', name: 'Cron Builder', description: 'Build from field lines, or explain an expression.', category: 'devops', icon: '⏱' },
   { id: 'gitignore-builder', name: '.gitignore Builder', description: 'Combine templates for your stack.', category: 'devops', icon: 'git' },
