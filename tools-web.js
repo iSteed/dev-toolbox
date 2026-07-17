@@ -824,7 +824,49 @@
     },
 
     'cookie-parser'(value) {
-      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header value.');
+      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header, or "name: value" field lines to build one.');
+      const fieldLine = /^(name|value|path|domain|max-age|expires|samesite|httponly|secure)\s*:/im;
+      if (fieldLine.test(input.split('\n')[0])) {
+        const allowed = new Set(['name', 'value', 'path', 'domain', 'max-age', 'expires', 'samesite', 'httponly', 'secure']);
+        const fields = Object.create(null);
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          if (!allowed.has(key)) throw new Error(`Unknown cookie field "${key}". Known: ${[...allowed].join(', ')}.`);
+          if (key in fields) throw new Error(`Cookie field "${key}" is defined more than once.`);
+          fields[key] = line.slice(idx + 1).trim();
+        }
+        if (!fields.name) throw new Error('A "name:" line is required to build a cookie.');
+        if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(fields.name)) throw new Error('Cookie name contains invalid characters.');
+        const rejectHeaderChars = (label, v) => {
+          if (/[\r\n;]/.test(v)) throw new Error(`${label} cannot contain newlines or semicolons.`);
+        };
+        rejectHeaderChars('Cookie value', fields.value || '');
+        if (fields.path) rejectHeaderChars('Path', fields.path);
+        if (fields.domain) rejectHeaderChars('Domain', fields.domain);
+        if (fields.expires) rejectHeaderChars('Expires', fields.expires);
+        if (fields['max-age'] && !/^-?\d+$/.test(fields['max-age'])) throw new Error('Max-Age must be an integer number of seconds.');
+        if (fields.samesite && !/^(strict|lax|none)$/i.test(fields.samesite)) throw new Error('SameSite must be Strict, Lax, or None.');
+        const truthy = (key) => {
+          const v = fields[key];
+          if (v === undefined || v === '') return false;
+          if (/^(true|1|yes|on)$/i.test(v)) return true;
+          if (/^(false|0|no|off)$/i.test(v)) return false;
+          throw new Error(`"${key}" must be true or false, got "${v}".`);
+        };
+        const parts = [`${fields.name}=${fields.value || ''}`];
+        if (fields.path) parts.push(`Path=${fields.path}`);
+        if (fields.domain) parts.push(`Domain=${fields.domain}`);
+        if (fields['max-age']) parts.push(`Max-Age=${fields['max-age']}`);
+        if (fields.expires) parts.push(`Expires=${fields.expires}`);
+        if (fields.samesite) parts.push(`SameSite=${fields.samesite}`);
+        if (truthy('httponly')) parts.push('HttpOnly');
+        if (truthy('secure')) parts.push('Secure');
+        return { output: parts.join('; '), status: 'Built a Set-Cookie header from the field lines above.' };
+      }
       if (/^\s*set-cookie:/i.test(input) || /(;\s*(httponly|secure|samesite|max-age|expires|domain|path)\b)/i.test(input)) {
         const clean = input.replace(/^\s*set-cookie:\s*/i, '');
         const parts = clean.split(';').map(s => s.trim());
@@ -986,7 +1028,7 @@
     'mime-lookup': 'An extension (png), filename (a.svg), or MIME type (text/css)…',
     'file-signature': 'Leading file bytes as hex: 89 50 4E 47 — or a type name like "png"…',
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
-    'cookie-parser': 'A Cookie or Set-Cookie header value…',
+    'cookie-parser': 'A Cookie/Set-Cookie header, or "name: value" field lines to build one…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
     'curl-builder': 'Line 1: METHOD url · then Header: value lines · then body: …',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
