@@ -261,6 +261,15 @@ function throws(fn, substr) {
     const validated = out(run('compose-validator', built));
     assert(validated.includes('✓'), 'built file should validate clean:\n' + validated);
   });
+  check('compose-validator: build mode volume classification and validation', () => {
+    const binds = out(run('compose-validator', 'service: app\nimage: alpine:3.20\nvolumes: ${DATA_DIR}:/data, ~/data:/home, C:\\data:/win, ./src:/src'));
+    assert(!binds.includes('volumes:\n') || !/^volumes:/m.test(binds), 'no top-level volumes for bind mounts:\n' + binds);
+    const named = out(run('compose-validator', 'service: app\nimage: alpine:3.20\nvolumes: cache:/var/cache'));
+    assert(/^volumes:/m.test(named) && named.includes('cache'), 'named volume still declared: ' + named);
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\n\nservice: web\nimage: b:1'), 'more than once');
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\nport: 8080:80'), 'Unknown field');
+    throws(() => run('compose-validator', 'service: web\nimage: a:1\nimage: b:1'), 'more than once');
+  });
   check('cron-builder: parses and finds next runs', () => {
     const result = run('cron-builder', '*/15 9-17 * * MON-FRI');
     const text = out(result);
