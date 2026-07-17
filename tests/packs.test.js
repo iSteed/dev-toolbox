@@ -314,6 +314,17 @@ function throws(fn, substr) {
     const impliedPost = out(run('curl-builder', "curl https://example.com -d 'x=1'"));
     assert(impliedPost.startsWith('POST https://example.com'), 'defaults to POST with a body: ' + impliedPost);
   });
+  check('curl-builder: parse handles arity, quoting, =values, repeated data', () => {
+    throws(() => run('curl-builder', 'curl -u alice:secret https://example.com'), 'Unsupported curl option');
+    const literalBackslash = out(run('curl-builder', "curl https://example.com -d 'a\\b'"));
+    assert(literalBackslash.includes('body: a\\b'), 'single-quoted backslash stays literal: ' + literalBackslash);
+    const eqForm = out(run('curl-builder', 'curl --request=PUT --data=x=1 https://example.com'));
+    assert(eqForm.startsWith('PUT https://example.com') && eqForm.includes('body: x=1'), '--option=value: ' + eqForm);
+    const multiData = out(run('curl-builder', "curl https://example.com -d a=1 -d b=2"));
+    assert(multiData.includes('body: a=1&b=2'), 'repeated --data joined with &: ' + multiData);
+    throws(() => run('curl-builder', 'curl -X'), 'missing its argument');
+    throws(() => run('curl-builder', "curl https://a.com https://b.com"), 'two possible URLs');
+  });
   check('curl-builder: round-trips build -> parse -> build', () => {
     const built = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
     const parsed = out(run('curl-builder', built));
