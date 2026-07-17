@@ -1002,9 +1002,26 @@
     },
 
     'cidr-calculator'(value) {
-      const input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24.').split('\n')[0].trim();
+      let input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24 — or an IP range "start - end" to find the smallest covering CIDR.').split('\n')[0].trim();
+      let rangeNote = null;
+      const rangeMatch = input.match(/^([\d.]+)\s*-\s*([\d.]+)$/);
+      if (rangeMatch) {
+        const startIp = ipToInt(rangeMatch[1], rangeMatch[1]);
+        const endIp = ipToInt(rangeMatch[2], rangeMatch[2]);
+        if (endIp < startIp) throw new Error(`Range end ${rangeMatch[2]} is before start ${rangeMatch[1]}.`);
+        let prefix = 32;
+        let network = startIp;
+        for (; prefix >= 0; prefix--) {
+          const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+          network = (startIp & mask) >>> 0;
+          const broadcast = (network | ~mask) >>> 0;
+          if (network <= startIp && broadcast >= endIp) break;
+        }
+        rangeNote = `Smallest CIDR covering ${rangeMatch[1]} - ${rangeMatch[2]}: ${intToIp(network)}/${prefix}`;
+        input = `${intToIp(network)}/${prefix}`;
+      }
       const m = input.match(/^([\d.]+)(?:\/(\d{1,2}))?$/);
-      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8.');
+      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8 — or an IP range "10.0.0.0 - 10.0.0.255".');
       const prefix = m[2] === undefined ? 32 : Number(m[2]);
       if (prefix > 32) throw new Error('Prefix length must be between 0 and 32.');
       const ip = ipToInt(m[1], m[1]);
@@ -1025,39 +1042,88 @@
         ['Total addresses', total.toLocaleString()],
         ['Range type', ipRangeNote(network)]
       ];
-      return { output: alignTable(rows), status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
+      const output = rangeNote ? `${rangeNote}\n\n${alignTable(rows)}` : alignTable(rows);
+      return { output, status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
     },
 
     'url-parser'(value) {
-      let input = requireInput(value, 'Paste a URL to parse.').split('\n')[0].trim();
+      const input = requireInput(value, 'Paste a URL to break apart, or scheme/host/path field lines to build one.');
+      const fieldLine = /^(scheme|protocol|username|user|password|host|hostname|port|path|query(\.\S+)?|search|fragment|hash)\s*:/im;
+
+      if (fieldLine.test(input.split('\n')[0])) {
+        const known = ['scheme', 'protocol', 'username', 'user', 'password', 'host', 'hostname', 'port', 'path', 'query', 'search', 'fragment', 'hash'];
+        const fields = {};
+        const params = [];
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line || line.startsWith('#')) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const val = line.slice(idx + 1).trim();
+          if (key.startsWith('query.')) {
+            params.push([key.slice('query.'.length), val]);
+            continue;
+          }
+          if (!known.includes(key)) throw new Error(`Unknown field "${key}" — expected one of: ${known.join(', ')}, or query.<name>.`);
+          if (key in fields) throw new Error(`Duplicate "${key}:" line.`);
+          fields[key] = val;
+        }
+        const scheme = (fields.scheme || fields.protocol || 'https').replace(/:$/, '');
+        if (!/^[a-z][a-z0-9+.-]*$/i.test(scheme)) throw new Error(`Invalid scheme "${scheme}".`);
+        const host = fields.host || fields.hostname;
+        if (!host) throw new Error('A "host:" (or "hostname:") line is required to build a URL.');
+        if (/[\s/@?#\\]/.test(host)) throw new Error(`Invalid host "${host}".`);
+        if (fields.port && (!/^\d+$/.test(fields.port) || Number(fields.port) > 65535)) throw new Error(`Invalid port "${fields.port}".`);
+        let built = `${scheme}://`;
+        const username = fields.username || fields.user;
+        if (username) built += fields.password ? `${username}:${fields.password}@` : `${username}@`;
+        built += host;
+        if (fields.port) built += `:${fields.port}`;
+        built += fields.path ? (fields.path.startsWith('/') ? fields.path : '/' + fields.path) : '/';
+        let query = fields.query || fields.search || '';
+        if (params.length) {
+          const sp = new URLSearchParams();
+          for (const [k, v] of params) sp.append(k, v);
+          query = query.replace(/^\?/, '');
+          query = query ? query + '&' + sp.toString() : sp.toString();
+        }
+        if (query) built += query.startsWith('?') ? query : '?' + query;
+        const fragment = fields.fragment || fields.hash;
+        if (fragment) built += fragment.startsWith('#') ? fragment : '#' + fragment;
+        let url;
+        try { url = new URL(built); } catch (e) { throw new Error('Built an invalid URL: ' + built); }
+        return { output: url.toString(), status: 'Built a URL from the field lines above.' };
+      }
+
+      let parseable = input.split('\n')[0].trim();
       const notes = [];
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(input)) {
-        input = 'https://' + input;
+      if (!/^[a-z][a-z0-9+.-]*:/i.test(parseable)) {
+        parseable = 'https://' + parseable;
         notes.push('No scheme given — assumed https://');
       }
       let url;
-      try { url = new URL(input); } catch (e) { throw new Error('Not a valid URL: ' + input); }
-      const defaultPorts = { 'http:': '80', 'https:': '443', 'ftp:': '21', 'ws:': '80', 'wss:': '443' };
-      const rows = [
-        ['Protocol', url.protocol],
-        ['Username', url.username || '(none)'],
-        ['Password', url.password ? '••• (present)' : '(none)'],
-        ['Hostname', url.hostname],
-        ['Port', url.port || `${defaultPorts[url.protocol] || '(none)'} (default)`],
-        ['Path', url.pathname],
-        ['Fragment', url.hash || '(none)'],
-        ['Origin', url.origin]
-      ];
-      const params = [...url.searchParams.entries()];
-      const lines = [alignTable(rows)];
-      if (params.length) {
-        lines.push('', `Query parameters (${params.length}):`);
-        lines.push(alignTable(params.map(([k, v]) => ['  ' + k, '= ' + v])));
-      } else {
-        lines.push('', 'Query parameters: (none)');
+      try { url = new URL(parseable); } catch (e) { throw new Error('Not a valid URL: ' + parseable); }
+      if (!url.hostname) {
+        throw new Error(`"${url.protocol}" URLs have no host and cannot round-trip through field lines — paste an http(s)-style URL.`);
       }
-      if (notes.length) lines.push('', ...notes.map(n => '• ' + n));
-      return lines.join('\n');
+      const lines = [
+        `scheme: ${url.protocol.replace(/:$/, '')}`,
+        `username: ${url.username}`,
+        `password: ${url.password}`,
+        `host: ${url.hostname}`,
+        `port: ${url.port}`,
+        `path: ${url.pathname}`
+      ];
+      const entries = [...url.searchParams.entries()];
+      if (entries.length) {
+        for (const [k, v] of entries) lines.push(`query.${k}: ${v}`);
+      } else {
+        lines.push('query: ');
+      }
+      lines.push(`fragment: ${url.hash.replace(/^#/, '')}`);
+      if (notes.length) lines.push('', ...notes.map(n => '# ' + n));
+      return { output: lines.join('\n'), status: `Decoded ${url.hostname} — edit a line and run again to rebuild the URL.` };
     },
 
     'http-headers'(value) {
@@ -1215,7 +1281,54 @@
     },
 
     'docker-linter'(value) {
-      const source = requireInput(value, 'Paste a Dockerfile.');
+      const input = requireInput(value, 'Paste a Dockerfile, or "image: value" field lines to build one.');
+      const fieldLine = /^(image|from|workdir|copy|env|run|expose|cmd|entrypoint|user|label)\s*:/im;
+      if (fieldLine.test(input.split('\n')[0])) {
+        const keywords = {
+          image: 'FROM', from: 'FROM', workdir: 'WORKDIR', copy: 'COPY', env: 'ENV',
+          run: 'RUN', expose: 'EXPOSE', cmd: 'CMD', entrypoint: 'ENTRYPOINT', user: 'USER', label: 'LABEL'
+        };
+        const singletons = new Set(['FROM', 'CMD', 'ENTRYPOINT']);
+        const seen = new Set();
+        const parsed = [];
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const keyword = keywords[key];
+          if (!keyword) throw new Error(`Unknown field "${key}". Known: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label.`);
+          const val = line.slice(idx + 1).trim();
+          if (!val) throw new Error(`Field "${key}" needs a value.`);
+          if (singletons.has(keyword)) {
+            if (seen.has(keyword)) throw new Error(`Field "${key}" (${keyword}) can only be given once.`);
+            seen.add(keyword);
+          }
+          if (keyword === 'CMD' || keyword === 'ENTRYPOINT') {
+            let args;
+            if (val.startsWith('[')) {
+              try { args = JSON.parse(val); } catch { throw new Error(`"${key}" looks like a JSON array but doesn't parse — check the quoting.`); }
+              if (!Array.isArray(args) || !args.every(a => typeof a === 'string')) throw new Error(`"${key}" must be a JSON array of strings.`);
+            } else if (/["']/.test(val)) {
+              throw new Error(`"${key}" contains quotes — pass it as a JSON array, e.g. ${key}: ["node", "-e", "console.log(1)"], so arguments aren't split incorrectly.`);
+            } else {
+              args = val.split(/\s+/);
+            }
+            parsed.push(`${keyword} ${JSON.stringify(args)}`);
+          } else {
+            parsed.push(`${keyword} ${val}`);
+          }
+        }
+        if (!seen.has('FROM')) throw new Error('An "image:" (or "from:") line is required to build a Dockerfile.');
+        // Emit in input order, except FROM must come first.
+        const out = [
+          ...parsed.filter(l => l.startsWith('FROM ')),
+          ...parsed.filter(l => !l.startsWith('FROM '))
+        ];
+        return { output: out.join('\n') + '\n', status: `Built a Dockerfile with ${out.length} instruction(s) — paste it back in to lint.` };
+      }
+      const source = input;
       const rawLines = source.split('\n');
       const instructions = [];
       for (let i = 0; i < rawLines.length; i++) {
@@ -1287,7 +1400,53 @@
     },
 
     'compose-validator'(value) {
-      const source = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file.');
+      const input = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file, or "service: name" blocks to build one.');
+      if (/^service\s*:/im.test(input.split('\n')[0])) {
+        const blocks = input.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+        const services = Object.create(null);
+        const namedVolumes = new Set();
+        const KNOWN_FIELDS = new Set(['service', 'image', 'build', 'ports', 'volumes', 'environment', 'depends_on', 'depends-on', 'restart']);
+        for (const block of blocks) {
+          const fields = Object.create(null);
+          for (const raw of block.split('\n')) {
+            const line = raw.trim();
+            if (!line) continue;
+            const idx = line.indexOf(':');
+            if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+            const key = line.slice(0, idx).trim().toLowerCase();
+            if (!KNOWN_FIELDS.has(key)) throw new Error(`Unknown field "${key}". Known: service, image, build, ports, volumes, environment, depends_on, restart.`);
+            if (key in fields) throw new Error(`Field "${key}" appears more than once in the same service block.`);
+            fields[key] = line.slice(idx + 1).trim();
+          }
+          if (!fields.service) throw new Error('Each block needs a "service: name" line.');
+          if (fields.service in services) throw new Error(`Service "${fields.service}" is defined more than once.`);
+          const svc = {};
+          if (fields.image) svc.image = fields.image;
+          if (fields.build) svc.build = fields.build;
+          if (fields.ports) svc.ports = fields.ports.split(',').map(s => s.trim());
+          if (fields.volumes) {
+            svc.volumes = fields.volumes.split(',').map(s => s.trim());
+            for (const v of svc.volumes) {
+              const name = v.split(':')[0];
+              // Bind mounts (., /, $VAR, ~, or Windows drive letters) are not named volumes —
+              // same classification the validator below uses.
+              const isBind = !name || name.startsWith('.') || name.startsWith('/') || name.startsWith('$')
+                || name.startsWith('~') || /^[A-Za-z]$/.test(name) && /^[A-Za-z]:[\\/]/.test(v);
+              if (!isBind && v.includes(':')) namedVolumes.add(name);
+            }
+          }
+          if (fields.environment) svc.environment = fields.environment.split(',').map(s => s.trim());
+          if (fields.depends_on && fields['depends-on']) throw new Error('Use either "depends_on" or "depends-on", not both.');
+          if (fields.depends_on || fields['depends-on']) svc.depends_on = (fields.depends_on || fields['depends-on']).split(',').map(s => s.trim());
+          if (fields.restart) svc.restart = fields.restart;
+          if (!svc.image && !svc.build) throw new Error(`Service "${fields.service}" needs an "image:" or "build:" line.`);
+          services[fields.service] = svc;
+        }
+        const doc = { services };
+        if (namedVolumes.size) doc.volumes = Object.fromEntries([...namedVolumes].map(n => [n, null]));
+        return { output: yamlStringify(doc), status: `Built a Compose file with ${Object.keys(services).length} service(s) — paste it back in to validate.` };
+      }
+      const source = input;
       let doc;
       try { doc = yamlParse(source); } catch (e) { throw new Error('Not parseable as YAML — ' + e.message); }
       if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('A Compose file must be a YAML mapping at the top level.');
@@ -1395,8 +1554,37 @@
     },
 
     'cron-builder'(value) {
-      let expr = requireInput(value, 'Enter a cron expression, e.g. */15 9-17 * * MON-FRI').split('\n')[0].trim();
+      const input = requireInput(value, 'Enter a cron expression, e.g. */15 9-17 * * MON-FRI — or minute/hour/day/month/weekday field lines.');
+      const fieldLine = /^(minute|min|hour|day|dom|month|mon|weekday|dow|wday)\s*:/im;
+      let expr;
       const notes = [];
+      if (fieldLine.test(input.split('\n')[0])) {
+        const aliases = {
+          minute: 'minute', min: 'minute',
+          hour: 'hour',
+          day: 'dom', dom: 'dom',
+          month: 'month', mon: 'month',
+          weekday: 'dow', dow: 'dow', wday: 'dow'
+        };
+        const fields = Object.create(null);
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const suppliedKey = line.slice(0, idx).trim().toLowerCase();
+          const key = aliases[suppliedKey];
+          if (!key) throw new Error(`Unknown cron field "${suppliedKey}". Known: minute/min, hour, day/dom, month/mon, weekday/dow/wday.`);
+          if (key in fields) throw new Error(`Cron field "${key}" is defined more than once.`);
+          const val = line.slice(idx + 1).trim();
+          if (!val) throw new Error(`Cron field "${suppliedKey}" needs a value (omit the line to default to *).`);
+          fields[key] = val;
+        }
+        expr = [fields.minute || '*', fields.hour || '*', fields.dom || '*', fields.month || '*', fields.dow || '*'].join(' ');
+        notes.push(`Built from field lines: ${expr}`);
+      } else {
+        expr = input.split('\n')[0].trim();
+      }
       if (expr.startsWith('@')) {
         if (expr === '@reboot') {
           return { output: '@reboot runs once at daemon startup — it has no schedule to expand.', status: 'Macro explained.' };
@@ -1552,8 +1740,37 @@
       return { output: result, status: `${length} characters from the ${charsetName} charset (~${bits} bits of entropy).` };
     },
 
-    'qr-generator'(value) {
-      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes).');
+    async 'qr-generator'(value) {
+      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes) — or paste a QR image to decode it.');
+      // Decode mode is explicit: the paste handler prefixes pasted images with "decode-image:".
+      // A bare data:image/... string is legitimate text and is encoded like any other.
+      if (/^decode-image:/i.test(input.trim())) {
+        const dataUrl = input.trim().replace(/^decode-image:/i, '');
+        if (!/^data:image\//i.test(dataUrl)) throw new Error('decode-image: must be followed by a data:image URL — paste a QR image into the input instead.');
+        if (typeof document === 'undefined' || typeof window === 'undefined' || !('BarcodeDetector' in window)) {
+          throw new Error('QR decoding needs a browser with BarcodeDetector support (Chrome, Edge, or similar) — this one does not have it.');
+        }
+        if (window.BarcodeDetector.getSupportedFormats) {
+          const formats = await window.BarcodeDetector.getSupportedFormats();
+          if (!formats.includes('qr_code')) {
+            throw new Error('This browser has BarcodeDetector but does not support the qr_code format.');
+          }
+        }
+        const img = new Image();
+        const loaded = new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error('Could not load that image data.'));
+        });
+        img.src = dataUrl;
+        await loaded;
+        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        const results = await detector.detect(img);
+        if (!results.length) throw new Error('No QR code found in that image.');
+        return {
+          output: results[0].rawValue,
+          status: results.length > 1 ? `Decoded ${results.length} QR codes — showing the first.` : 'Decoded the QR code.'
+        };
+      }
       const { modules, version, size } = QR.encodeText(input);
       return {
         output: QR.toHalfBlocks(modules),
@@ -1601,22 +1818,22 @@
     'hash-generator': 'Text to hash — or key, a line with only ---, then the message (HMAC)…',
     'csp-builder': 'Optional: one "directive extra-sources" per line to extend the strict baseline…',
     'password-entropy': 'Type a password or passphrase (it never leaves this page)…',
-    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16…',
-    'url-parser': 'Paste a URL to break into components…',
+    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16 — or a range "10.0.0.0 - 10.0.0.255"…',
+    'url-parser': 'Paste a URL to break into fields, or "field: value" lines to build one…',
     'http-headers': 'Paste raw HTTP headers, one per line…',
     'dns-lookup': 'domain.tld, optionally followed by a type: example.com MX…',
     'regex-tester': 'Line 1: /pattern/flags — following lines: text to test…',
     'case-converter': 'A phrase or identifier, e.g. userProfileSettings…',
     'text-diff': 'Original text, a line with only ---, then the changed text…',
     'slug-generator': 'A title to convert into a URL-safe slug…',
-    'docker-linter': 'Paste a Dockerfile…',
-    'compose-validator': 'Paste a docker-compose.yml…',
-    'cron-builder': 'A 5-field cron expression, e.g. 0 3 * * SUN — or a macro like @daily…',
+    'docker-linter': 'Paste a Dockerfile to lint, or "image: value" field lines to build one…',
+    'compose-validator': 'Paste a docker-compose.yml to validate, or "service: name" blocks to build one…',
+    'cron-builder': 'A 5-field cron expression, a macro like @daily — or minute/hour/day/month/weekday field lines…',
     'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
     'timestamp-converter': 'Unix seconds/milliseconds or an ISO date — empty for “now”…',
     'random-string': 'Length and charset, e.g. "48 hex" (alnum, hex, url, ascii, digits)…',
-    'qr-generator': 'Text or URL to encode as a QR code…'
+    'qr-generator': 'Text or URL to encode as a QR code — or paste/screenshot a QR image to decode it…'
   };
 
   const ToolKit = {

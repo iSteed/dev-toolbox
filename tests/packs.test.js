@@ -137,6 +137,24 @@ function throws(fn, substr) {
     assert(nanos.every(n => n.length === 12), 'nano length');
   });
 
+  check('id-generator: decodes a ULID timestamp', () => {
+    const before = Date.now();
+    const ulid = out(run('id-generator', '1 ulid')).trim();
+    const decoded = out(run('id-generator', ulid));
+    assert(decoded.includes(ulid), decoded);
+    const msLine = decoded.split('\n').find(l => l.startsWith('Timestamp'));
+    const ms = Number(msLine.split(/\s+/).pop());
+    assert(Math.abs(ms - before) < 5000, 'decoded timestamp near generation time: ' + decoded);
+  });
+
+  check('id-generator: ULID timestamp range and case handling', () => {
+    const maxValid = out(run('id-generator', '7ZZZZZZZZZ' + 'A'.repeat(16)));
+    assert(maxValid.includes('Timestamp'), 'largest 48-bit prefix decodes: ' + maxValid);
+    throws(() => run('id-generator', '8ZZZZZZZZZ' + 'A'.repeat(16)), '48-bit');
+    const lower = out(run('id-generator', ('01ARZ3NDEKTSV4RRFFQ69G5FAV').toLowerCase()));
+    assert(lower.includes('01ARZ3NDEKTSV4RRFFQ69G5FAV'), 'lowercase normalized: ' + lower);
+  });
+
   check('passphrase + lorem produce output', () => {
     assert(out(run('passphrase-generator', '5')).split('\n')[0].split('-').length === 5, 'five words');
     assert(out(run('lorem-ipsum', '2 sentences')).length > 20, 'lorem');
@@ -285,6 +303,20 @@ function throws(fn, substr) {
     assert(out(run('file-signature', 'ff d8 ff e0')).includes('JPEG'), 'jpeg');
     assert(out(run('file-signature', '50 4B 03 04')).includes('ZIP'), 'zip');
   });
+  check('file-signature: reverse lookup by type name', () => {
+    const png = out(run('file-signature', 'png'));
+    assert(png.includes('89 50 4E 47') && png.includes('PNG image'), png);
+    const zip = out(run('file-signature', 'zip'));
+    assert(zip.includes('50 4B 03 04'), zip);
+    throws(() => run('file-signature', 'not-a-real-format'), 'No known file type');
+  });
+  check('file-signature: direction ambiguity and dotted extensions', () => {
+    const deb = out(run('file-signature', 'deb'));
+    assert(deb.includes('Debian'), 'odd-length hex-like "deb" does reverse lookup: ' + deb);
+    throws(() => run('file-signature', 'abc'), 'odd number of digits');
+    const dotted = out(run('file-signature', '.png'));
+    assert(dotted.includes('PNG image'), '.png normalized: ' + dotted);
+  });
 
   check('cookie-parser: Set-Cookie flags + security notes', () => {
     const r = out(run('cookie-parser', 'Set-Cookie: id=abc; Path=/; Secure; HttpOnly; SameSite=Strict'));
@@ -293,6 +325,23 @@ function throws(fn, substr) {
     assert(insecure.includes('No HttpOnly') && insecure.includes('No Secure'), 'warnings: ' + insecure);
     const plain = out(run('cookie-parser', 'a=1; b=2; c=3'));
     assert(plain.includes('a') && plain.includes('b'), 'plain cookie header');
+  });
+  check('cookie-parser: builds a Set-Cookie header from field lines', () => {
+    const built = out(run('cookie-parser', 'name: session\nvalue: abc123\npath: /\nmax-age: 3600\nhttponly: true\nsamesite: Lax'));
+    assert(built === 'session=abc123; Path=/; Max-Age=3600; SameSite=Lax; HttpOnly', built);
+    throws(() => run('cookie-parser', 'value: abc123'), 'name');
+    const roundTrip = out(run('cookie-parser', built));
+    assert(roundTrip.includes('session') && roundTrip.includes('No Secure'), 'round-trip through decode: ' + roundTrip);
+  });
+  check('cookie-parser: build mode rejects injection and invalid fields', () => {
+    throws(() => run('cookie-parser', 'name: session\nvalue: abc; Secure\nsecure: false'), 'semicolons');
+    throws(() => run('cookie-parser', 'name: se;ssion\nvalue: x'), 'invalid characters');
+    throws(() => run('cookie-parser', 'name: s\npath: /; Secure'), 'semicolons');
+    throws(() => run('cookie-parser', 'name: s\nunknown-field: x'), 'Unknown cookie field');
+    throws(() => run('cookie-parser', 'name: s\nvalue: 1\nvalue: 2'), 'more than once');
+    throws(() => run('cookie-parser', 'name: s\nsecure: flase'), 'must be true or false');
+    throws(() => run('cookie-parser', 'name: s\nsamesite: Sometimes'), 'Strict, Lax, or None');
+    throws(() => run('cookie-parser', 'name: s\nmax-age: tomorrow'), 'integer');
   });
 
   check('query-string: decode and build', () => {

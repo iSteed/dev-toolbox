@@ -423,6 +423,7 @@
     ['50 4B 03 04', 'ZIP archive (also DOCX/XLSX/JAR/APK)'], ['50 4B 05 06', 'Empty ZIP archive'],
     ['1F 8B', 'GZIP archive'], ['42 5A 68', 'BZIP2 archive'], ['FD 37 7A 58 5A', 'XZ archive'],
     ['37 7A BC AF 27 1C', '7-Zip archive'], ['75 73 74 61 72', 'TAR archive'],
+    ['21 3C 61 72 63 68 3E', 'ar archive (Debian .deb package)'],
     ['7F 45 4C 46', 'ELF executable'], ['4D 5A', 'Windows PE executable (EXE/DLL)'],
     ['CA FE BA BE', 'Java class file'], ['00 00 01 00', 'ICO icon'],
     ['3C 3F 78 6D 6C', 'XML document'], ['3C 73 76 67', 'SVG image'],
@@ -775,9 +776,21 @@
     },
 
     'file-signature'(value) {
-      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47).').trim();
+      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47), or a file type/extension to look up its signature.').trim();
       const compact = input.replace(/(0x|[\s,:])/gi, '').toLowerCase();
-      if (!/^[0-9a-f]+$/.test(compact) || compact.length < 2) throw new Error('Enter file bytes as hex, like "89 50 4E 47" or "ffd8ff".');
+      const looksHex = /^[0-9a-f]+$/.test(compact) && compact.length >= 2;
+      if (!looksHex || compact.length % 2 !== 0) {
+        const query = input.toLowerCase().replace(/^\./, ''); // ".png" -> "png"
+        const hits = FILE_SIGNATURES.filter(([, name]) => name.toLowerCase().includes(query));
+        if (!hits.length) {
+          if (looksHex) throw new Error(`"${input}" reads as hex but has an odd number of digits — hex input must contain complete bytes, and no type name matches it either.`);
+          throw new Error(`No known file type matches "${input}". Enter hex bytes to identify a file, or a type name/extension to look up its signature.`);
+        }
+        return {
+          output: alignTable([['SIGNATURE', 'TYPE'], ...hits.map(([sig, name]) => [sig, name])]),
+          status: `${hits.length} known signature(s) matching "${input}".`
+        };
+      }
       const bytes = [];
       for (let i = 0; i + 1 < compact.length; i += 2) bytes.push(parseInt(compact.slice(i, i + 2), 16));
       const asHex = bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
@@ -811,7 +824,49 @@
     },
 
     'cookie-parser'(value) {
-      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header value.');
+      const input = requireInput(value, 'Paste a Cookie or Set-Cookie header, or "name: value" field lines to build one.');
+      const fieldLine = /^(name|value|path|domain|max-age|expires|samesite|httponly|secure)\s*:/im;
+      if (fieldLine.test(input.split('\n')[0])) {
+        const allowed = new Set(['name', 'value', 'path', 'domain', 'max-age', 'expires', 'samesite', 'httponly', 'secure']);
+        const fields = Object.create(null);
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          if (!allowed.has(key)) throw new Error(`Unknown cookie field "${key}". Known: ${[...allowed].join(', ')}.`);
+          if (key in fields) throw new Error(`Cookie field "${key}" is defined more than once.`);
+          fields[key] = line.slice(idx + 1).trim();
+        }
+        if (!fields.name) throw new Error('A "name:" line is required to build a cookie.');
+        if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(fields.name)) throw new Error('Cookie name contains invalid characters.');
+        const rejectHeaderChars = (label, v) => {
+          if (/[\r\n;]/.test(v)) throw new Error(`${label} cannot contain newlines or semicolons.`);
+        };
+        rejectHeaderChars('Cookie value', fields.value || '');
+        if (fields.path) rejectHeaderChars('Path', fields.path);
+        if (fields.domain) rejectHeaderChars('Domain', fields.domain);
+        if (fields.expires) rejectHeaderChars('Expires', fields.expires);
+        if (fields['max-age'] && !/^-?\d+$/.test(fields['max-age'])) throw new Error('Max-Age must be an integer number of seconds.');
+        if (fields.samesite && !/^(strict|lax|none)$/i.test(fields.samesite)) throw new Error('SameSite must be Strict, Lax, or None.');
+        const truthy = (key) => {
+          const v = fields[key];
+          if (v === undefined || v === '') return false;
+          if (/^(true|1|yes|on)$/i.test(v)) return true;
+          if (/^(false|0|no|off)$/i.test(v)) return false;
+          throw new Error(`"${key}" must be true or false, got "${v}".`);
+        };
+        const parts = [`${fields.name}=${fields.value || ''}`];
+        if (fields.path) parts.push(`Path=${fields.path}`);
+        if (fields.domain) parts.push(`Domain=${fields.domain}`);
+        if (fields['max-age']) parts.push(`Max-Age=${fields['max-age']}`);
+        if (fields.expires) parts.push(`Expires=${fields.expires}`);
+        if (fields.samesite) parts.push(`SameSite=${fields.samesite}`);
+        if (truthy('httponly')) parts.push('HttpOnly');
+        if (truthy('secure')) parts.push('Secure');
+        return { output: parts.join('; '), status: 'Built a Set-Cookie header from the field lines above.' };
+      }
       if (/^\s*set-cookie:/i.test(input) || /(;\s*(httponly|secure|samesite|max-age|expires|domain|path)\b)/i.test(input)) {
         const clean = input.replace(/^\s*set-cookie:\s*/i, '');
         const parts = clean.split(';').map(s => s.trim());
@@ -1042,9 +1097,9 @@
     'ip-calculator': 'An IPv4 address to convert to int, hex, binary, IPv6…',
     'port-lookup': 'A port number (5432) or a keyword (redis, mail)…',
     'mime-lookup': 'An extension (png), filename (a.svg), or MIME type (text/css)…',
-    'file-signature': 'Leading file bytes as hex: 89 50 4E 47…',
+    'file-signature': 'Leading file bytes as hex: 89 50 4E 47 — or a type name like "png"…',
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
-    'cookie-parser': 'A Cookie or Set-Cookie header value…',
+    'cookie-parser': 'A Cookie/Set-Cookie header, or "name: value" field lines to build one…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
     'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
