@@ -292,6 +292,13 @@ function throws(fn, substr) {
     assert(zip.includes('50 4B 03 04'), zip);
     throws(() => run('file-signature', 'not-a-real-format'), 'No known file type');
   });
+  check('file-signature: direction ambiguity and dotted extensions', () => {
+    const deb = out(run('file-signature', 'deb'));
+    assert(deb.includes('Debian'), 'odd-length hex-like "deb" does reverse lookup: ' + deb);
+    throws(() => run('file-signature', 'abc'), 'odd number of digits');
+    const dotted = out(run('file-signature', '.png'));
+    assert(dotted.includes('PNG image'), '.png normalized: ' + dotted);
+  });
 
   check('cookie-parser: Set-Cookie flags + security notes', () => {
     const r = out(run('cookie-parser', 'Set-Cookie: id=abc; Path=/; Secure; HttpOnly; SameSite=Strict'));
