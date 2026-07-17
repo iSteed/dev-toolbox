@@ -423,6 +423,7 @@
     ['50 4B 03 04', 'ZIP archive (also DOCX/XLSX/JAR/APK)'], ['50 4B 05 06', 'Empty ZIP archive'],
     ['1F 8B', 'GZIP archive'], ['42 5A 68', 'BZIP2 archive'], ['FD 37 7A 58 5A', 'XZ archive'],
     ['37 7A BC AF 27 1C', '7-Zip archive'], ['75 73 74 61 72', 'TAR archive'],
+    ['21 3C 61 72 63 68 3E', 'ar archive (Debian .deb package)'],
     ['7F 45 4C 46', 'ELF executable'], ['4D 5A', 'Windows PE executable (EXE/DLL)'],
     ['CA FE BA BE', 'Java class file'], ['00 00 01 00', 'ICO icon'],
     ['3C 3F 78 6D 6C', 'XML document'], ['3C 73 76 67', 'SVG image'],
@@ -775,9 +776,21 @@
     },
 
     'file-signature'(value) {
-      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47).').trim();
+      const input = requireInput(value, 'Paste the first bytes of a file as hex (e.g. 89 50 4E 47), or a file type/extension to look up its signature.').trim();
       const compact = input.replace(/(0x|[\s,:])/gi, '').toLowerCase();
-      if (!/^[0-9a-f]+$/.test(compact) || compact.length < 2) throw new Error('Enter file bytes as hex, like "89 50 4E 47" or "ffd8ff".');
+      const looksHex = /^[0-9a-f]+$/.test(compact) && compact.length >= 2;
+      if (!looksHex || compact.length % 2 !== 0) {
+        const query = input.toLowerCase().replace(/^\./, ''); // ".png" -> "png"
+        const hits = FILE_SIGNATURES.filter(([, name]) => name.toLowerCase().includes(query));
+        if (!hits.length) {
+          if (looksHex) throw new Error(`"${input}" reads as hex but has an odd number of digits — hex input must contain complete bytes, and no type name matches it either.`);
+          throw new Error(`No known file type matches "${input}". Enter hex bytes to identify a file, or a type name/extension to look up its signature.`);
+        }
+        return {
+          output: alignTable([['SIGNATURE', 'TYPE'], ...hits.map(([sig, name]) => [sig, name])]),
+          status: `${hits.length} known signature(s) matching "${input}".`
+        };
+      }
       const bytes = [];
       for (let i = 0; i + 1 < compact.length; i += 2) bytes.push(parseInt(compact.slice(i, i + 2), 16));
       const asHex = bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
@@ -971,7 +984,7 @@
     'ip-calculator': 'An IPv4 address to convert to int, hex, binary, IPv6…',
     'port-lookup': 'A port number (5432) or a keyword (redis, mail)…',
     'mime-lookup': 'An extension (png), filename (a.svg), or MIME type (text/css)…',
-    'file-signature': 'Leading file bytes as hex: 89 50 4E 47…',
+    'file-signature': 'Leading file bytes as hex: 89 50 4E 47 — or a type name like "png"…',
     'status-code': 'An HTTP status (404) or a keyword (redirect, teapot)…',
     'cookie-parser': 'A Cookie or Set-Cookie header value…',
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',

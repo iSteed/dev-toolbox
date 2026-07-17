@@ -75,7 +75,7 @@ const tools = [
   { id: 'cookie-parser', name: 'Cookie Parser', description: 'Break down Cookie and Set-Cookie headers.', category: 'network', icon: '🍪' },
   { id: 'query-string', name: 'Query String', description: 'Decode or build URL query strings.', category: 'network', icon: '?=' },
   { id: 'curl-builder', name: 'curl Builder', description: 'Assemble a curl command from parts.', category: 'network', icon: '$' },
-  { id: 'file-signature', name: 'File Signature', description: 'Identify a file from its magic bytes.', category: 'network', icon: '⌘' },
+  { id: 'file-signature', name: 'File Signature', description: 'Identify a file, or look up a type’s magic bytes.', category: 'network', icon: '⌘' },
 
   // Security addition (tools-web.js)
   { id: 'jwt-generate', name: 'JWT Generator', description: 'Build an unsigned test JWT from JSON.', category: 'security', icon: 'JW+' }
