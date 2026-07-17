@@ -69,6 +69,7 @@ const tools = [
   // Network additions (tools-web.js)
   { id: 'ip-calculator', name: 'IP Calculator', description: 'Convert an IPv4 to int, hex, binary, IPv6.', category: 'network', icon: 'IP' },
   { id: 'reverse-dns', name: 'Reverse DNS', description: 'Look up the PTR record for an IPv4.', category: 'network', icon: 'PTR' },
+  { id: 'env-validator', name: '.env Validator', description: 'Lint env files and diff two of them.', category: 'devops', icon: '.env' },
   { id: 'port-lookup', name: 'Port Lookup', description: 'Identify well-known TCP/UDP ports.', category: 'network', icon: ':P' },
   { id: 'mime-lookup', name: 'MIME Lookup', description: 'Map extensions to MIME types and back.', category: 'network', icon: 'M' },
   { id: 'status-code', name: 'HTTP Status Codes', description: 'Look up any HTTP status code.', category: 'network', icon: '2xx' },

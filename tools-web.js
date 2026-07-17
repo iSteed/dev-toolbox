@@ -1045,6 +1045,65 @@
         output: `${ip}  →  ${arpa}\n\n` + answers.map(a => '  ' + a.data).join('\n'),
         status: `${answers.length} PTR record(s) via Cloudflare DoH.`
       };
+    },
+
+    'env-validator'(value) {
+      const input = requireInput(value, 'Paste a .env file — or two files separated by a line with only --- to diff their keys.');
+      const parseEnv = (text, label) => {
+        const keys = new Map(); // key -> first line number
+        const findings = [];
+        const finding = (line, level, message) => findings.push({ line, level, message });
+        text.split('\n').forEach((raw, i) => {
+          const line = i + 1;
+          if (!raw.trim() || raw.trim().startsWith('#')) return;
+          if (/^\s*export\s+/.test(raw)) raw = raw.replace(/^\s*export\s+/, '');
+          const idx = raw.indexOf('=');
+          if (idx === -1) {
+            finding(line, 'error', `No "=" — "${truncate(raw.trim(), 30)}" is not a KEY=value assignment.`);
+            return;
+          }
+          const key = raw.slice(0, idx);
+          const val = raw.slice(idx + 1);
+          if (key !== key.trim()) finding(line, 'error', `Whitespace around the key "${key.trim()}" — most parsers treat spaces before "=" as part of the name.`);
+          const name = key.trim();
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) finding(line, 'error', `"${truncate(name, 30)}" is not a valid variable name ([A-Za-z_][A-Za-z0-9_]*).`);
+          if (keys.has(name)) finding(line, 'error', `Duplicate key "${name}" — first defined on line ${keys.get(name)}; the last value silently wins.`);
+          else keys.set(name, line);
+          if (/^\s/.test(val)) finding(line, 'warn', `"${name}" has whitespace right after "=" — it becomes part of the value in most parsers.`);
+          if (/\s$/.test(val) && !/^["'].*["']\s*$/.test(val.trim())) finding(line, 'warn', `"${name}" has trailing whitespace in its value.`);
+          const t = val.trim();
+          if ((t.startsWith('"') && !(t.length > 1 && t.endsWith('"'))) || (t.startsWith("'") && !(t.length > 1 && t.endsWith("'")))) {
+            finding(line, 'error', `"${name}" has an unclosed quote.`);
+          }
+          if (!/^["']/.test(t) && /\s#/.test(t)) finding(line, 'info', `"${name}": everything after " #" may be parsed as a comment — quote the value if the # is intentional.`);
+          if (!/^["']/.test(t) && /\s/.test(t) && !/\s#/.test(t)) finding(line, 'warn', `"${name}" has an unquoted value containing spaces — quote it for portability.`);
+          if (t === '') finding(line, 'info', `"${name}" is set but empty.`);
+        });
+        return { keys, findings, label };
+      };
+      const render = ({ findings, keys }) => {
+        if (!findings.length) return `  ✓ ${keys.size} variable(s), no issues.`;
+        return findings.map(f => `  [${f.level}] line ${f.line}: ${f.message}`).join('\n');
+      };
+      const parts = input.split(/^\s*---\s*$/m);
+      if (parts.length >= 2) {
+        const a = parseEnv(parts[0], 'A');
+        const b = parseEnv(parts[1], 'B');
+        const onlyA = [...a.keys.keys()].filter(k => !b.keys.has(k));
+        const onlyB = [...b.keys.keys()].filter(k => !a.keys.has(k));
+        const out = [
+          'File A:', render(a), '', 'File B:', render(b), '',
+          onlyA.length ? `Only in A (missing from B):\n${onlyA.map(k => '  - ' + k).join('\n')}` : 'No keys missing from B.',
+          onlyB.length ? `Only in B (missing from A):\n${onlyB.map(k => '  - ' + k).join('\n')}` : 'No keys missing from A.'
+        ];
+        return { output: out.join('\n'), status: `${a.keys.size} vs ${b.keys.size} variable(s); ${onlyA.length + onlyB.length} key difference(s).` };
+      }
+      const result = parseEnv(input, '');
+      const errors = result.findings.filter(f => f.level === 'error').length;
+      return {
+        output: render(result),
+        status: errors ? `${errors} error(s), ${result.findings.length - errors} other finding(s).` : `${result.keys.size} variable(s), ${result.findings.length} finding(s).`
+      };
     }
   };
 
@@ -1075,7 +1134,8 @@
     'query-string': 'https://example.com/search?q=dev+toolbox&page=2&sort=stars&tag=local',
     'curl-builder': 'POST https://api.example.com/v1/tools\nContent-Type: application/json\nAuthorization: Bearer TOKEN\nbody: {"name":"json-formatter"}',
     'jwt-generate': '{"sub":"1234567890","name":"Dev Toolbox","admin":true,"iat":1516239022,"exp":1893456000}',
-    'reverse-dns': '1.1.1.1'
+    'reverse-dns': '1.1.1.1',
+    'env-validator': 'DATABASE_URL=postgres://localhost/dev\nAPI_KEY = abc123\nDEBUG=true\nDEBUG=false\nMESSAGE=hello world'
   });
 
   Object.assign(ToolKit.placeholders, {
@@ -1103,7 +1163,8 @@
     'query-string': 'A URL/query string to decode, or key=value lines to build one…',
     'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
-    'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…'
+    'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…',
+    'env-validator': 'Paste a .env file — or two files separated by --- to diff their keys…'
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ToolKit;
