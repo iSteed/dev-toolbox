@@ -1836,8 +1836,46 @@
     'qr-generator': 'Text or URL to encode as a QR code — or paste/screenshot a QR image to decode it…'
   };
 
+  // ---------------------------------------------------------------- GUI forms
+  // Tools listed here get a "Form" toggle in the input pane. Each spec renders
+  // controls whose values are serialized by toInput() into the tool's normal
+  // text input, so the form is just another way to type — the runner is unchanged.
+  const forms = {
+    'cron-builder': {
+      intro: 'Pick a preset, or fill in fields — anything left blank means "every".',
+      fields: [
+        {
+          key: 'preset', label: 'Preset', type: 'select',
+          options: [
+            ['', 'Custom…'],
+            ['@hourly', 'Hourly (on the hour)'],
+            ['@daily', 'Daily (midnight)'],
+            ['@weekly', 'Weekly (Sun midnight)'],
+            ['@monthly', 'Monthly (1st, midnight)'],
+            ['@yearly', 'Yearly (Jan 1, midnight)']
+          ]
+        },
+        { key: 'minute', label: 'Minute', placeholder: '0-59, */15, 0,30 …' },
+        { key: 'hour', label: 'Hour', placeholder: '0-23, 9-17 …' },
+        { key: 'day', label: 'Day of month', placeholder: '1-31' },
+        { key: 'month', label: 'Month', placeholder: '1-12 or JAN-DEC' },
+        { key: 'weekday', label: 'Weekday', placeholder: 'SUN, MON-FRI …' }
+      ],
+      // Preset wins; otherwise emit field lines for whatever was filled in.
+      toInput(v) {
+        if (v.preset) return v.preset;
+        const lines = [];
+        for (const key of ['minute', 'hour', 'day', 'month', 'weekday']) {
+          if ((v[key] || '').trim()) lines.push(`${key}: ${v[key].trim()}`);
+        }
+        return lines.length ? lines.join('\n') : 'minute: *';
+      },
+      disables: { preset: ['minute', 'hour', 'day', 'month', 'weekday'] }
+    }
+  };
+
   const ToolKit = {
-    runners, examples, placeholders, yamlParse, yamlStringify,
+    runners, examples, placeholders, forms, yamlParse, yamlStringify,
     // Shared helpers for the add-on tool packs (tools-encode.js, tools-web.js).
     helpers: { splitTwo, requireInput, alignTable, truncate, pad, humanDuration, relativeTime, parseCSV, detectDelimiter, bytesToHex, decodeBase64Url, SEPARATOR }
   };

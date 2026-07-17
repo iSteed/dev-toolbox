@@ -355,6 +355,15 @@ function throws(fn, substr) {
     const allStar = out(run('cron-builder', 'hour: 3'));
     assert(allStar.includes('Built from field lines: * 3 * * *'), 'missing fields default to *: ' + allStar);
   });
+  check('cron-builder: GUI form spec serializes to valid input', () => {
+    const spec = ToolKit.forms['cron-builder'];
+    assert(spec && spec.fields.length === 6, 'form spec registered');
+    assert(spec.toInput({ preset: '@daily' }) === '@daily', 'preset wins');
+    const built = spec.toInput({ preset: '', minute: '0', hour: '9', weekday: 'MON-FRI' });
+    assert(built === 'minute: 0\nhour: 9\nweekday: MON-FRI', built);
+    assert(out(run('cron-builder', built)).includes('Built from field lines: 0 9 * * MON-FRI'), 'form output runs');
+    assert(out(run('cron-builder', spec.toInput({}))).includes('* * * * *') || out(run('cron-builder', spec.toInput({}))).includes('every minute'), 'empty form still runs');
+  });
   check('cron-builder: field-line validation', () => {
     throws(() => run('cron-builder', 'minute: 0\nhours: 9'), 'Unknown cron field');
     throws(() => run('cron-builder', 'minute: 0\nmin: 30'), 'more than once');

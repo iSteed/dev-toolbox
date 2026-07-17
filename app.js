@@ -137,6 +137,9 @@ const swapButton = document.getElementById('swapOutput');
 const copyButton = document.getElementById('copyOutput');
 const themeToggle = document.getElementById('themeToggle');
 const seam = document.querySelector('.seam');
+const guiToggle = document.getElementById('guiToggle');
+const guiForm = document.getElementById('guiForm');
+let guiOn = false;
 
 function activeTool() {
   return tools.find(tool => tool.id === activeToolId);
@@ -280,6 +283,8 @@ function openTool(id) {
   input.value = ToolKit.examples[id] ?? '';
   input.placeholder = ToolKit.placeholders[id] ?? 'Paste input here';
   document.body.classList.remove('running');
+  guiToggle.hidden = !guiSpec(id);
+  setGuiMode(false);
 
   if (isManual(id)) {
     showIdle('Press run when ready.');
@@ -290,6 +295,89 @@ function openTool(id) {
   }
   renderList();
 }
+
+/* ---------- GUI form mode ---------- */
+
+function guiSpec(id = activeToolId) {
+  return (ToolKit.forms || {})[id];
+}
+
+function guiValues() {
+  const values = {};
+  for (const el of guiForm.querySelectorAll('[data-key]')) values[el.dataset.key] = el.value;
+  return values;
+}
+
+function guiSync() {
+  const spec = guiSpec();
+  if (!spec) return;
+  const values = guiValues();
+  // A field with a value can disable others (e.g. a preset overrides the detail fields).
+  for (const [master, slaves] of Object.entries(spec.disables || {})) {
+    const active = !!(values[master] || '').trim();
+    for (const key of slaves) {
+      const el = guiForm.querySelector(`[data-key="${key}"]`);
+      if (el) el.disabled = active;
+    }
+  }
+  input.value = spec.toInput(values);
+  scheduleLiveRun();
+  if (isManual()) runActiveTool();
+}
+
+function renderGuiForm() {
+  const spec = guiSpec();
+  guiForm.innerHTML = '';
+  if (!spec) return;
+  if (spec.intro) {
+    const p = document.createElement('p');
+    p.className = 'gui-intro';
+    p.textContent = spec.intro;
+    guiForm.appendChild(p);
+  }
+  for (const field of spec.fields) {
+    const row = document.createElement('label');
+    row.className = 'gui-row';
+    const name = document.createElement('span');
+    name.textContent = field.label;
+    let control;
+    if (field.type === 'select') {
+      control = document.createElement('select');
+      for (const [value, label] of field.options) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        control.appendChild(opt);
+      }
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.placeholder = field.placeholder || '';
+      control.spellcheck = false;
+    }
+    control.dataset.key = field.key;
+    control.addEventListener('input', guiSync);
+    row.append(name, control);
+    guiForm.appendChild(row);
+  }
+}
+
+function setGuiMode(on) {
+  const wasOn = guiOn;
+  guiOn = on && !!guiSpec();
+  guiForm.hidden = !guiOn;
+  input.hidden = guiOn;
+  guiToggle.setAttribute('aria-pressed', String(guiOn));
+  guiToggle.classList.toggle('pinned', guiOn);
+  if (guiOn) {
+    renderGuiForm();
+    guiSync();
+  } else if (wasOn) {
+    input.focus();
+  }
+}
+
+guiToggle.addEventListener('click', () => setGuiMode(!guiOn));
 
 /* ---------- theme ---------- */
 
