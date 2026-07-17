@@ -20,7 +20,7 @@ const tools = [
   { id: 'cron-builder', name: 'Cron Builder', description: 'Explain cron expressions and preview runs.', category: 'devops', icon: '⏱' },
   { id: 'gitignore-builder', name: '.gitignore Builder', description: 'Combine templates for your stack.', category: 'devops', icon: 'git' },
   { id: 'uuid-generator', name: 'UUID Generator', description: 'Generate v4/v7 UUIDs, or inspect one.', category: 'generators', icon: 'ID' },
-  { id: 'id-generator', name: 'ULID / NanoID', description: 'Generate sortable ULIDs and compact NanoIDs.', category: 'generators', icon: 'UL' },
+  { id: 'id-generator', name: 'ULID / NanoID', description: 'Generate, or decode a ULID’s timestamp.', category: 'generators', icon: 'UL' },
   { id: 'timestamp-converter', name: 'Timestamp Converter', description: 'Convert Unix and ISO timestamps.', category: 'generators', icon: 'T' },
   { id: 'random-string', name: 'Random String', description: 'Generate configurable random strings.', category: 'generators', icon: 'R' },
   { id: 'passphrase-generator', name: 'Passphrase Generator', description: 'Build memorable word-based passphrases.', category: 'generators', icon: '⚿' },

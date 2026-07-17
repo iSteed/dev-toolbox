@@ -137,6 +137,24 @@ function throws(fn, substr) {
     assert(nanos.every(n => n.length === 12), 'nano length');
   });
 
+  check('id-generator: decodes a ULID timestamp', () => {
+    const before = Date.now();
+    const ulid = out(run('id-generator', '1 ulid')).trim();
+    const decoded = out(run('id-generator', ulid));
+    assert(decoded.includes(ulid), decoded);
+    const msLine = decoded.split('\n').find(l => l.startsWith('Timestamp'));
+    const ms = Number(msLine.split(/\s+/).pop());
+    assert(Math.abs(ms - before) < 5000, 'decoded timestamp near generation time: ' + decoded);
+  });
+
+  check('id-generator: ULID timestamp range and case handling', () => {
+    const maxValid = out(run('id-generator', '7ZZZZZZZZZ' + 'A'.repeat(16)));
+    assert(maxValid.includes('Timestamp'), 'largest 48-bit prefix decodes: ' + maxValid);
+    throws(() => run('id-generator', '8ZZZZZZZZZ' + 'A'.repeat(16)), '48-bit');
+    const lower = out(run('id-generator', ('01ARZ3NDEKTSV4RRFFQ69G5FAV').toLowerCase()));
+    assert(lower.includes('01ARZ3NDEKTSV4RRFFQ69G5FAV'), 'lowercase normalized: ' + lower);
+  });
+
   check('passphrase + lorem produce output', () => {
     assert(out(run('passphrase-generator', '5')).split('\n')[0].split('-').length === 5, 'five words');
     assert(out(run('lorem-ipsum', '2 sentences')).length > 20, 'lorem');
