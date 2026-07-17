@@ -182,6 +182,10 @@ function throws(fn, substr) {
     const uneven = out(run('cidr-calculator', '10.0.0.5 - 10.0.0.9'));
     assert(uneven.includes('10.0.0.0/28'), 'rounds up to smallest containing block: ' + uneven);
     throws(() => run('cidr-calculator', '10.0.0.10 - 10.0.0.5'), 'before start');
+    const single = out(run('cidr-calculator', '10.0.0.5 - 10.0.0.5'));
+    assert(single.includes('10.0.0.5/32'), 'single IP -> /32: ' + single);
+    const whole = out(run('cidr-calculator', '0.0.0.0 - 255.255.255.255'));
+    assert(whole.includes('0.0.0.0/0'), 'full space -> /0: ' + whole);
   });
   check('url-parser: components and query params', () => {
     const text = out(run('url-parser', examples['url-parser']));
