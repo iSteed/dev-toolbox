@@ -308,10 +308,7 @@ function guiValues() {
   return values;
 }
 
-function guiSync() {
-  const spec = guiSpec();
-  if (!spec) return;
-  const values = guiValues();
+function guiApplyDisables(spec, values) {
   // A field with a value can disable others (e.g. a preset overrides the detail fields).
   for (const [master, slaves] of Object.entries(spec.disables || {})) {
     const active = !!(values[master] || '').trim();
@@ -320,9 +317,28 @@ function guiSync() {
       if (el) el.disabled = active;
     }
   }
+}
+
+function guiSync() {
+  const spec = guiSpec();
+  if (!spec) return;
+  const values = guiValues();
+  guiApplyDisables(spec, values);
   input.value = spec.toInput(values);
-  scheduleLiveRun();
-  if (isManual()) runActiveTool();
+  if (isManual()) setStatus('Input updated — press run.');
+  else scheduleLiveRun();
+}
+
+// Populate the form controls from the current text input, so the form always
+// shows what the runner will actually receive.
+function guiHydrate() {
+  const spec = guiSpec();
+  if (!guiOn || !spec) return;
+  const values = spec.fromInput ? spec.fromInput(input.value) : {};
+  for (const el of guiForm.querySelectorAll('[data-key]')) {
+    el.value = values[el.dataset.key] ?? '';
+  }
+  guiApplyDisables(spec, values);
 }
 
 function renderGuiForm() {
@@ -370,9 +386,10 @@ function setGuiMode(on) {
   guiToggle.setAttribute('aria-pressed', String(guiOn));
   guiToggle.classList.toggle('pinned', guiOn);
   if (guiOn) {
-    // Render but don't serialize yet — the existing input (typed text or a
-    // previous form result) survives until the user changes a control.
+    // Render, then hydrate the controls from the existing input — opening the
+    // form never changes what the runner receives.
     renderGuiForm();
+    guiHydrate();
   } else if (wasOn) {
     input.focus();
   }
@@ -467,13 +484,15 @@ document.getElementById('clearTool').addEventListener('click', () => {
   input.value = '';
   runCounter++;
   clearTimeout(liveTimer);
+  guiHydrate();
   showIdle(isManual() ? 'Press run when ready.' : 'Paste input on the left — results appear as you type.');
   setStatus('Cleared.');
-  input.focus();
+  if (!guiOn) input.focus();
 });
 
 document.getElementById('loadExample').addEventListener('click', () => {
   input.value = ToolKit.examples[activeToolId] ?? '';
+  guiHydrate();
   if (isManual()) setStatus('Example loaded — press run.');
   else runActiveTool();
 });
@@ -481,6 +500,7 @@ document.getElementById('loadExample').addEventListener('click', () => {
 swapButton.addEventListener('click', () => {
   if (swapButton.disabled) return;
   input.value = output.textContent;
+  guiHydrate();
   setStatus('Output moved to input.');
   if (!isManual()) runActiveTool();
   else showIdle('Press run when ready.');

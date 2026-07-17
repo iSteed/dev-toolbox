@@ -1870,6 +1870,33 @@
         }
         return lines.length ? lines.join('\n') : 'minute: *';
       },
+      // Hydrate controls from the current text input so opening the form
+      // (or Clear/Example while it's open) never diverges from the runner's input.
+      fromInput(text) {
+        const v = { preset: '', minute: '', hour: '', day: '', month: '', weekday: '' };
+        const trimmed = (text || '').trim();
+        if (!trimmed) return v;
+        if (this.fields[0].options.some(([value]) => value && value === trimmed)) {
+          v.preset = trimmed;
+          return v;
+        }
+        const aliases = { minute: 'minute', min: 'minute', hour: 'hour', day: 'day', dom: 'day', month: 'month', mon: 'month', weekday: 'weekday', dow: 'weekday', wday: 'weekday' };
+        const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.every(l => aliases[l.slice(0, l.indexOf(':')).trim().toLowerCase()])) {
+          for (const line of lines) {
+            const idx = line.indexOf(':');
+            const key = aliases[line.slice(0, idx).trim().toLowerCase()];
+            const val = line.slice(idx + 1).trim();
+            if (key && val && val !== '*') v[key] = val;
+          }
+          return v;
+        }
+        const parts = lines[0].split(/\s+/);
+        if (parts.length === 5) {
+          [v.minute, v.hour, v.day, v.month, v.weekday] = parts.map(p => (p === '*' ? '' : p));
+        }
+        return v;
+      },
       disables: { preset: ['minute', 'hour', 'day', 'month', 'weekday'] }
     }
   };
