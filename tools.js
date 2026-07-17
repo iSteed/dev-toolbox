@@ -1218,29 +1218,48 @@
       const input = requireInput(value, 'Paste a Dockerfile, or "image: value" field lines to build one.');
       const fieldLine = /^(image|from|workdir|copy|env|run|expose|cmd|entrypoint|user|label)\s*:/im;
       if (fieldLine.test(input.split('\n')[0])) {
-        const image = [], workdir = [], copy = [], env = [], run = [], expose = [], cmd = [], entrypoint = [], user = [], label = [];
-        const bucket = { image, from: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label };
+        const keywords = {
+          image: 'FROM', from: 'FROM', workdir: 'WORKDIR', copy: 'COPY', env: 'ENV',
+          run: 'RUN', expose: 'EXPOSE', cmd: 'CMD', entrypoint: 'ENTRYPOINT', user: 'USER', label: 'LABEL'
+        };
+        const singletons = new Set(['FROM', 'CMD', 'ENTRYPOINT']);
+        const seen = new Set();
+        const parsed = [];
         for (const raw of input.split('\n')) {
           const line = raw.trim();
           if (!line) continue;
           const idx = line.indexOf(':');
           if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
           const key = line.slice(0, idx).trim().toLowerCase();
+          const keyword = keywords[key];
+          if (!keyword) throw new Error(`Unknown field "${key}". Known: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label.`);
           const val = line.slice(idx + 1).trim();
-          if (!(key in bucket)) throw new Error(`Unknown field "${key}". Known: image, workdir, copy, env, run, expose, cmd, entrypoint, user, label.`);
-          bucket[key].push(val);
+          if (!val) throw new Error(`Field "${key}" needs a value.`);
+          if (singletons.has(keyword)) {
+            if (seen.has(keyword)) throw new Error(`Field "${key}" (${keyword}) can only be given once.`);
+            seen.add(keyword);
+          }
+          if (keyword === 'CMD' || keyword === 'ENTRYPOINT') {
+            let args;
+            if (val.startsWith('[')) {
+              try { args = JSON.parse(val); } catch { throw new Error(`"${key}" looks like a JSON array but doesn't parse — check the quoting.`); }
+              if (!Array.isArray(args) || !args.every(a => typeof a === 'string')) throw new Error(`"${key}" must be a JSON array of strings.`);
+            } else if (/["']/.test(val)) {
+              throw new Error(`"${key}" contains quotes — pass it as a JSON array, e.g. ${key}: ["node", "-e", "console.log(1)"], so arguments aren't split incorrectly.`);
+            } else {
+              args = val.split(/\s+/);
+            }
+            parsed.push(`${keyword} ${JSON.stringify(args)}`);
+          } else {
+            parsed.push(`${keyword} ${val}`);
+          }
         }
-        if (!image.length) throw new Error('An "image:" (or "from:") line is required to build a Dockerfile.');
-        const out = [`FROM ${image[0]}`];
-        for (const l of label) out.push(`LABEL ${l}`);
-        if (workdir.length) out.push(`WORKDIR ${workdir[workdir.length - 1]}`);
-        for (const c of copy) out.push(`COPY ${c}`);
-        for (const e of env) out.push(`ENV ${e}`);
-        for (const r of run) out.push(`RUN ${r}`);
-        for (const e of expose) out.push(`EXPOSE ${e}`);
-        if (user.length) out.push(`USER ${user[user.length - 1]}`);
-        if (entrypoint.length) out.push(`ENTRYPOINT ${JSON.stringify(entrypoint[entrypoint.length - 1].split(/\s+/))}`);
-        if (cmd.length) out.push(`CMD ${JSON.stringify(cmd[cmd.length - 1].split(/\s+/))}`);
+        if (!seen.has('FROM')) throw new Error('An "image:" (or "from:") line is required to build a Dockerfile.');
+        // Emit in input order, except FROM must come first.
+        const out = [
+          ...parsed.filter(l => l.startsWith('FROM ')),
+          ...parsed.filter(l => !l.startsWith('FROM '))
+        ];
         return { output: out.join('\n') + '\n', status: `Built a Dockerfile with ${out.length} instruction(s) — paste it back in to lint.` };
       }
       const source = input;
