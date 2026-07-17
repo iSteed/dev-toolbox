@@ -1287,7 +1287,53 @@
     },
 
     'compose-validator'(value) {
-      const source = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file.');
+      const input = requireInput(value, 'Paste a docker-compose.yml / compose.yaml file, or "service: name" blocks to build one.');
+      if (/^service\s*:/im.test(input.split('\n')[0])) {
+        const blocks = input.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+        const services = Object.create(null);
+        const namedVolumes = new Set();
+        const KNOWN_FIELDS = new Set(['service', 'image', 'build', 'ports', 'volumes', 'environment', 'depends_on', 'depends-on', 'restart']);
+        for (const block of blocks) {
+          const fields = Object.create(null);
+          for (const raw of block.split('\n')) {
+            const line = raw.trim();
+            if (!line) continue;
+            const idx = line.indexOf(':');
+            if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+            const key = line.slice(0, idx).trim().toLowerCase();
+            if (!KNOWN_FIELDS.has(key)) throw new Error(`Unknown field "${key}". Known: service, image, build, ports, volumes, environment, depends_on, restart.`);
+            if (key in fields) throw new Error(`Field "${key}" appears more than once in the same service block.`);
+            fields[key] = line.slice(idx + 1).trim();
+          }
+          if (!fields.service) throw new Error('Each block needs a "service: name" line.');
+          if (fields.service in services) throw new Error(`Service "${fields.service}" is defined more than once.`);
+          const svc = {};
+          if (fields.image) svc.image = fields.image;
+          if (fields.build) svc.build = fields.build;
+          if (fields.ports) svc.ports = fields.ports.split(',').map(s => s.trim());
+          if (fields.volumes) {
+            svc.volumes = fields.volumes.split(',').map(s => s.trim());
+            for (const v of svc.volumes) {
+              const name = v.split(':')[0];
+              // Bind mounts (., /, $VAR, ~, or Windows drive letters) are not named volumes —
+              // same classification the validator below uses.
+              const isBind = !name || name.startsWith('.') || name.startsWith('/') || name.startsWith('$')
+                || name.startsWith('~') || /^[A-Za-z]$/.test(name) && /^[A-Za-z]:[\\/]/.test(v);
+              if (!isBind && v.includes(':')) namedVolumes.add(name);
+            }
+          }
+          if (fields.environment) svc.environment = fields.environment.split(',').map(s => s.trim());
+          if (fields.depends_on && fields['depends-on']) throw new Error('Use either "depends_on" or "depends-on", not both.');
+          if (fields.depends_on || fields['depends-on']) svc.depends_on = (fields.depends_on || fields['depends-on']).split(',').map(s => s.trim());
+          if (fields.restart) svc.restart = fields.restart;
+          if (!svc.image && !svc.build) throw new Error(`Service "${fields.service}" needs an "image:" or "build:" line.`);
+          services[fields.service] = svc;
+        }
+        const doc = { services };
+        if (namedVolumes.size) doc.volumes = Object.fromEntries([...namedVolumes].map(n => [n, null]));
+        return { output: yamlStringify(doc), status: `Built a Compose file with ${Object.keys(services).length} service(s) — paste it back in to validate.` };
+      }
+      const source = input;
       let doc;
       try { doc = yamlParse(source); } catch (e) { throw new Error('Not parseable as YAML — ' + e.message); }
       if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('A Compose file must be a YAML mapping at the top level.');
@@ -1610,7 +1656,7 @@
     'text-diff': 'Original text, a line with only ---, then the changed text…',
     'slug-generator': 'A title to convert into a URL-safe slug…',
     'docker-linter': 'Paste a Dockerfile…',
-    'compose-validator': 'Paste a docker-compose.yml…',
+    'compose-validator': 'Paste a docker-compose.yml to validate, or "service: name" blocks to build one…',
     'cron-builder': 'A 5-field cron expression, e.g. 0 3 * * SUN — or a macro like @daily…',
     'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
