@@ -1002,9 +1002,26 @@
     },
 
     'cidr-calculator'(value) {
-      const input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24.').split('\n')[0].trim();
+      let input = requireInput(value, 'Enter CIDR notation, e.g. 192.168.1.0/24 — or an IP range "start - end" to find the smallest covering CIDR.').split('\n')[0].trim();
+      let rangeNote = null;
+      const rangeMatch = input.match(/^([\d.]+)\s*-\s*([\d.]+)$/);
+      if (rangeMatch) {
+        const startIp = ipToInt(rangeMatch[1], rangeMatch[1]);
+        const endIp = ipToInt(rangeMatch[2], rangeMatch[2]);
+        if (endIp < startIp) throw new Error(`Range end ${rangeMatch[2]} is before start ${rangeMatch[1]}.`);
+        let prefix = 32;
+        let network = startIp;
+        for (; prefix >= 0; prefix--) {
+          const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+          network = (startIp & mask) >>> 0;
+          const broadcast = (network | ~mask) >>> 0;
+          if (network <= startIp && broadcast >= endIp) break;
+        }
+        rangeNote = `Smallest CIDR covering ${rangeMatch[1]} - ${rangeMatch[2]}: ${intToIp(network)}/${prefix}`;
+        input = `${intToIp(network)}/${prefix}`;
+      }
       const m = input.match(/^([\d.]+)(?:\/(\d{1,2}))?$/);
-      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8.');
+      if (!m) throw new Error('Use the form a.b.c.d/prefix, e.g. 10.0.0.0/8 — or an IP range "10.0.0.0 - 10.0.0.255".');
       const prefix = m[2] === undefined ? 32 : Number(m[2]);
       if (prefix > 32) throw new Error('Prefix length must be between 0 and 32.');
       const ip = ipToInt(m[1], m[1]);
@@ -1025,7 +1042,8 @@
         ['Total addresses', total.toLocaleString()],
         ['Range type', ipRangeNote(network)]
       ];
-      return { output: alignTable(rows), status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
+      const output = rangeNote ? `${rangeNote}\n\n${alignTable(rows)}` : alignTable(rows);
+      return { output, status: `${usable.toLocaleString()} usable host(s) in ${intToIp(network)}/${prefix}.` };
     },
 
     'url-parser'(value) {
@@ -1647,7 +1665,7 @@
     'hash-generator': 'Text to hash — or key, a line with only ---, then the message (HMAC)…',
     'csp-builder': 'Optional: one "directive extra-sources" per line to extend the strict baseline…',
     'password-entropy': 'Type a password or passphrase (it never leaves this page)…',
-    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16…',
+    'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16 — or a range "10.0.0.0 - 10.0.0.255"…',
     'url-parser': 'Paste a URL to break into components…',
     'http-headers': 'Paste raw HTTP headers, one per line…',
     'dns-lookup': 'domain.tld, optionally followed by a type: example.com MX…',
