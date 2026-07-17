@@ -743,8 +743,10 @@
         const rnd = crypto.getRandomValues(new Uint8Array(size));
         return [...rnd].map(b => NANO_ALPHABET[b % 64]).join('');
       };
-      const trimmed = value.trim();
+      const trimmed = value.trim().length === 26 ? value.trim().toUpperCase() : value.trim();
       if (/^[0-9A-HJKMNP-TV-Z]{26}$/.test(trimmed)) {
+        // The 48-bit timestamp only fills 48 of the first 10 chars' 50 bits, so char 1 maxes out at '7'.
+        if (CROCKFORD.indexOf(trimmed[0]) > 7) throw new Error('Not a valid ULID — the timestamp exceeds the 48-bit range (first character must be 0-7).');
         const ms = trimmed.slice(0, 10).split('').reduce((acc, ch) => acc * 32 + CROCKFORD.indexOf(ch), 0);
         const date = new Date(ms);
         if (Number.isNaN(date.getTime())) throw new Error('That looks like a ULID, but its timestamp is not a valid date.');
