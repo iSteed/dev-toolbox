@@ -27,6 +27,7 @@ const tools = [
   { id: 'lorem-ipsum', name: 'Lorem Ipsum', description: 'Generate placeholder words and paragraphs.', category: 'generators', icon: '¶' },
   { id: 'luhn-check', name: 'Luhn / Test Cards', description: 'Validate or generate Luhn card numbers.', category: 'generators', icon: '⊞' },
   { id: 'qr-generator', name: 'QR Generator', description: 'Render QR codes, or paste an image to decode.', category: 'generators', icon: 'QR' },
+  { id: 'data-generator', name: 'Fake Data', description: 'Generate test rows as JSON, CSV, or SQL.', category: 'generators', icon: '⚄' },
 
   // Encode pack (tools-encode.js)
   { id: 'base64', name: 'Base64', description: 'Encode or decode base64 and base64url.', category: 'encode', icon: 'b64' },

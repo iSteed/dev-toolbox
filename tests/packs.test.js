@@ -349,6 +349,27 @@ function throws(fn, substr) {
     assert(out(run('query-string', 'q=dev toolbox\npage=2')).includes('q=dev+toolbox'), 'build: ' + out(run('query-string', 'q=dev toolbox\npage=2')));
   });
 
+  check('data-generator: json, csv, sql shapes', () => {
+    const json = JSON.parse(out(run('data-generator', 'rows: 3\nformat: json\nfields: id, name, email, bool')));
+    assert(json.length === 3 && json[0].id === 1 && json[2].id === 3, 'ids sequential');
+    assert(/@example\.com$/.test(json[0].email), 'email shape: ' + json[0].email);
+    assert(typeof json[0].bool === 'boolean', 'bool type');
+    const csv = out(run('data-generator', 'rows: 2\nformat: csv\nfields: id, uuid, date'));
+    const lines = csv.split('\n');
+    assert(lines[0] === 'id,uuid,date' && lines.length === 3, 'csv header + 2 rows');
+    assert(/^2,[0-9a-f-]{36},\d{4}-\d{2}-\d{2}$/.test(lines[2]), 'csv row shape: ' + lines[2]);
+    const sql = out(run('data-generator', 'rows: 2\nformat: sql\ntable: users\nfields: id, name'));
+    assert(sql.split('\n').every(l => l.startsWith('INSERT INTO users (id, name) VALUES (')), sql);
+    const short = JSON.parse(out(run('data-generator', '4 json')));
+    assert(short.length === 4 && 'email' in short[0], 'shorthand with default fields');
+  });
+  check('data-generator: rejects bad options', () => {
+    throws(() => run('data-generator', 'rows: 0'), '1 to 1000');
+    throws(() => run('data-generator', 'rows: 2\nfields: id, wizard'), 'Unknown field type');
+    throws(() => run('data-generator', 'format: yaml'), 'json, csv, or sql');
+    throws(() => run('data-generator', 'speed: fast'), 'Unknown option');
+    throws(() => run('data-generator', 'rows: 2\nformat: sql\ntable: users; drop'), 'plain identifier');
+  });
   check('curl-builder: assembles command', () => {
     const r = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
     assert(r.includes("curl -X POST 'https://api.x.com/v1'"), 'method+url');
@@ -388,7 +409,7 @@ function throws(fn, substr) {
   });
 
   // ---------- every new example runs clean ----------
-  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate'];
+  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','data-generator'];
   for (const id of NEW_IDS) {
     await checkAsync(`example runs clean: ${id}`, async () => {
       assert(examples[id] !== undefined, 'missing example');
