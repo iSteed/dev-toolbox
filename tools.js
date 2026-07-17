@@ -1047,35 +1047,83 @@
     },
 
     'url-parser'(value) {
-      let input = requireInput(value, 'Paste a URL to parse.').split('\n')[0].trim();
+      const input = requireInput(value, 'Paste a URL to break apart, or scheme/host/path field lines to build one.');
+      const fieldLine = /^(scheme|protocol|username|user|password|host|hostname|port|path|query(\.\S+)?|search|fragment|hash)\s*:/im;
+
+      if (fieldLine.test(input.split('\n')[0])) {
+        const known = ['scheme', 'protocol', 'username', 'user', 'password', 'host', 'hostname', 'port', 'path', 'query', 'search', 'fragment', 'hash'];
+        const fields = {};
+        const params = [];
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line || line.startsWith('#')) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "field: value".`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const val = line.slice(idx + 1).trim();
+          if (key.startsWith('query.')) {
+            params.push([key.slice('query.'.length), val]);
+            continue;
+          }
+          if (!known.includes(key)) throw new Error(`Unknown field "${key}" — expected one of: ${known.join(', ')}, or query.<name>.`);
+          if (key in fields) throw new Error(`Duplicate "${key}:" line.`);
+          fields[key] = val;
+        }
+        const scheme = (fields.scheme || fields.protocol || 'https').replace(/:$/, '');
+        if (!/^[a-z][a-z0-9+.-]*$/i.test(scheme)) throw new Error(`Invalid scheme "${scheme}".`);
+        const host = fields.host || fields.hostname;
+        if (!host) throw new Error('A "host:" (or "hostname:") line is required to build a URL.');
+        if (/[\s/@?#\\]/.test(host)) throw new Error(`Invalid host "${host}".`);
+        if (fields.port && (!/^\d+$/.test(fields.port) || Number(fields.port) > 65535)) throw new Error(`Invalid port "${fields.port}".`);
+        let built = `${scheme}://`;
+        const username = fields.username || fields.user;
+        if (username) built += fields.password ? `${username}:${fields.password}@` : `${username}@`;
+        built += host;
+        if (fields.port) built += `:${fields.port}`;
+        built += fields.path ? (fields.path.startsWith('/') ? fields.path : '/' + fields.path) : '/';
+        let query = fields.query || fields.search || '';
+        if (params.length) {
+          const sp = new URLSearchParams();
+          for (const [k, v] of params) sp.append(k, v);
+          query = query.replace(/^\?/, '');
+          query = query ? query + '&' + sp.toString() : sp.toString();
+        }
+        if (query) built += query.startsWith('?') ? query : '?' + query;
+        const fragment = fields.fragment || fields.hash;
+        if (fragment) built += fragment.startsWith('#') ? fragment : '#' + fragment;
+        let url;
+        try { url = new URL(built); } catch (e) { throw new Error('Built an invalid URL: ' + built); }
+        return { output: url.toString(), status: 'Built a URL from the field lines above.' };
+      }
+
+      let parseable = input.split('\n')[0].trim();
       const notes = [];
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(input)) {
-        input = 'https://' + input;
+      if (!/^[a-z][a-z0-9+.-]*:/i.test(parseable)) {
+        parseable = 'https://' + parseable;
         notes.push('No scheme given — assumed https://');
       }
       let url;
-      try { url = new URL(input); } catch (e) { throw new Error('Not a valid URL: ' + input); }
-      const defaultPorts = { 'http:': '80', 'https:': '443', 'ftp:': '21', 'ws:': '80', 'wss:': '443' };
-      const rows = [
-        ['Protocol', url.protocol],
-        ['Username', url.username || '(none)'],
-        ['Password', url.password ? '••• (present)' : '(none)'],
-        ['Hostname', url.hostname],
-        ['Port', url.port || `${defaultPorts[url.protocol] || '(none)'} (default)`],
-        ['Path', url.pathname],
-        ['Fragment', url.hash || '(none)'],
-        ['Origin', url.origin]
-      ];
-      const params = [...url.searchParams.entries()];
-      const lines = [alignTable(rows)];
-      if (params.length) {
-        lines.push('', `Query parameters (${params.length}):`);
-        lines.push(alignTable(params.map(([k, v]) => ['  ' + k, '= ' + v])));
-      } else {
-        lines.push('', 'Query parameters: (none)');
+      try { url = new URL(parseable); } catch (e) { throw new Error('Not a valid URL: ' + parseable); }
+      if (!url.hostname) {
+        throw new Error(`"${url.protocol}" URLs have no host and cannot round-trip through field lines — paste an http(s)-style URL.`);
       }
-      if (notes.length) lines.push('', ...notes.map(n => '• ' + n));
-      return lines.join('\n');
+      const lines = [
+        `scheme: ${url.protocol.replace(/:$/, '')}`,
+        `username: ${url.username}`,
+        `password: ${url.password}`,
+        `host: ${url.hostname}`,
+        `port: ${url.port}`,
+        `path: ${url.pathname}`
+      ];
+      const entries = [...url.searchParams.entries()];
+      if (entries.length) {
+        for (const [k, v] of entries) lines.push(`query.${k}: ${v}`);
+      } else {
+        lines.push('query: ');
+      }
+      lines.push(`fragment: ${url.hash.replace(/^#/, '')}`);
+      if (notes.length) lines.push('', ...notes.map(n => '# ' + n));
+      return { output: lines.join('\n'), status: `Decoded ${url.hostname} — edit a line and run again to rebuild the URL.` };
     },
 
     'http-headers'(value) {
@@ -1695,7 +1743,7 @@
     'csp-builder': 'Optional: one "directive extra-sources" per line to extend the strict baseline…',
     'password-entropy': 'Type a password or passphrase (it never leaves this page)…',
     'cidr-calculator': 'CIDR notation, e.g. 10.0.0.0/16 — or a range "10.0.0.0 - 10.0.0.255"…',
-    'url-parser': 'Paste a URL to break into components…',
+    'url-parser': 'Paste a URL to break into fields, or "field: value" lines to build one…',
     'http-headers': 'Paste raw HTTP headers, one per line…',
     'dns-lookup': 'domain.tld, optionally followed by a type: example.com MX…',
     'regex-tester': 'Line 1: /pattern/flags — following lines: text to test…',

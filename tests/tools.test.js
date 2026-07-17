@@ -187,12 +187,37 @@ function throws(fn, substr) {
     const whole = out(run('cidr-calculator', '0.0.0.0 - 255.255.255.255'));
     assert(whole.includes('0.0.0.0/0'), 'full space -> /0: ' + whole);
   });
-  check('url-parser: components and query params', () => {
+  check('url-parser: decodes into field lines', () => {
     const text = out(run('url-parser', examples['url-parser']));
-    assert(text.includes('api.example.com'), 'host');
-    assert(text.includes('8443'), 'port');
-    assert(text.includes('q') && text.includes('dev tools'), 'params decoded');
+    assert(text.includes('host: api.example.com'), 'host');
+    assert(text.includes('port: 8443'), 'port');
+    assert(text.includes('query.q: dev tools'), 'query param decoded');
+    assert(text.includes('query.page: 2'), 'query param per line');
     assert(out(run('url-parser', 'example.com/x')).includes('assumed https://'), 'scheme note');
+    throws(() => run('url-parser', 'mailto:dev@example.com'), 'no host');
+  });
+  check('url-parser: builds a URL from field lines', () => {
+    const built = out(run('url-parser', 'scheme: https\nhost: api.example.com\nport: 8443\npath: /v1/search\nquery: q=dev+tools&page=2'));
+    assert(built === 'https://api.example.com:8443/v1/search?q=dev+tools&page=2', built);
+    throws(() => run('url-parser', 'scheme: https\npath: /x'), 'host');
+  });
+  check('url-parser: validates components and rejects bad fields', () => {
+    throws(() => run('url-parser', 'scheme: https\nhost: trusted.example@evil.example'), 'Invalid host');
+    throws(() => run('url-parser', 'scheme: ht tps\nhost: example.com'), 'Invalid scheme');
+    throws(() => run('url-parser', 'host: example.com\nport: 99999'), 'Invalid port');
+    throws(() => run('url-parser', 'host: example.com\nbogus: x'), 'Unknown field');
+    throws(() => run('url-parser', 'host: a.com\nhost: b.com'), 'Duplicate');
+    assert(out(run('url-parser', 'user: alice\nhost: example.com')).includes('alice@'), 'user alias');
+  });
+  check('url-parser: query.name lines build query params', () => {
+    const built = out(run('url-parser', 'host: example.com\nquery.q: dev tools\nquery.page: 2'));
+    assert(built === 'https://example.com/?q=dev+tools&page=2', built);
+  });
+  check('url-parser: round-trips decode -> edit -> build', () => {
+    const decoded = out(run('url-parser', examples['url-parser']));
+    const edited = decoded.replace('port: 8443', 'port: 9000');
+    const rebuilt = out(run('url-parser', edited));
+    assert(rebuilt.includes(':9000'), `expected edited port in ${rebuilt}`);
   });
   check('http-headers: annotates known and custom', () => {
     const result = run('http-headers', examples['http-headers']);
