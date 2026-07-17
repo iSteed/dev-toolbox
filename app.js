@@ -7,8 +7,8 @@ const tools = [
   { id: 'hash-generator', name: 'Hash Generator', description: 'Generate SHA and HMAC digests locally.', category: 'security', icon: '#' },
   { id: 'csp-builder', name: 'CSP Builder', description: 'Build a strict Content Security Policy.', category: 'security', icon: 'CSP' },
   { id: 'password-entropy', name: 'Password Entropy', description: 'Estimate strength and time to crack.', category: 'security', icon: '•••' },
-  { id: 'cidr-calculator', name: 'CIDR Calculator', description: 'Calculate ranges, masks, and hosts.', category: 'network', icon: '/24' },
-  { id: 'url-parser', name: 'URL Parser', description: 'Break URLs into readable components.', category: 'network', icon: '://' },
+  { id: 'cidr-calculator', name: 'CIDR Calculator', description: 'Calculate a CIDR, or build one from a range.', category: 'network', icon: '/24' },
+  { id: 'url-parser', name: 'URL Parser', description: 'Break a URL into fields, or build one from them.', category: 'network', icon: '://' },
   { id: 'http-headers', name: 'HTTP Header Inspector', description: 'Explain request and response headers.', category: 'network', icon: 'H' },
   { id: 'dns-lookup', name: 'DNS Lookup', description: 'Query live records via DNS-over-HTTPS.', category: 'network', icon: 'DNS' },
   { id: 'regex-tester', name: 'Regex Tester', description: 'Test expressions against sample text.', category: 'text', icon: '.*' },
@@ -16,17 +16,17 @@ const tools = [
   { id: 'text-diff', name: 'Text Diff', description: 'Compare two text blocks line by line.', category: 'text', icon: '±' },
   { id: 'slug-generator', name: 'Slug Generator', description: 'Create URL-safe slugs from text.', category: 'text', icon: '-' },
   { id: 'docker-linter', name: 'Dockerfile Linter', description: 'Check images against best practices.', category: 'devops', icon: 'D' },
-  { id: 'compose-validator', name: 'Compose Validator', description: 'Validate Docker Compose structure.', category: 'devops', icon: 'DC' },
+  { id: 'compose-validator', name: 'Compose Validator', description: 'Validate a Compose file, or build one.', category: 'devops', icon: 'DC' },
   { id: 'cron-builder', name: 'Cron Builder', description: 'Build from field lines, or explain an expression.', category: 'devops', icon: '⏱' },
   { id: 'gitignore-builder', name: '.gitignore Builder', description: 'Combine templates for your stack.', category: 'devops', icon: 'git' },
   { id: 'uuid-generator', name: 'UUID Generator', description: 'Generate v4/v7 UUIDs, or inspect one.', category: 'generators', icon: 'ID' },
-  { id: 'id-generator', name: 'ULID / NanoID', description: 'Generate sortable ULIDs and compact NanoIDs.', category: 'generators', icon: 'UL' },
+  { id: 'id-generator', name: 'ULID / NanoID', description: 'Generate, or decode a ULID’s timestamp.', category: 'generators', icon: 'UL' },
   { id: 'timestamp-converter', name: 'Timestamp Converter', description: 'Convert Unix and ISO timestamps.', category: 'generators', icon: 'T' },
   { id: 'random-string', name: 'Random String', description: 'Generate configurable random strings.', category: 'generators', icon: 'R' },
   { id: 'passphrase-generator', name: 'Passphrase Generator', description: 'Build memorable word-based passphrases.', category: 'generators', icon: '⚿' },
   { id: 'lorem-ipsum', name: 'Lorem Ipsum', description: 'Generate placeholder words and paragraphs.', category: 'generators', icon: '¶' },
   { id: 'luhn-check', name: 'Luhn / Test Cards', description: 'Validate or generate Luhn card numbers.', category: 'generators', icon: '⊞' },
-  { id: 'qr-generator', name: 'QR Generator', description: 'Render QR codes entirely client-side.', category: 'generators', icon: 'QR' },
+  { id: 'qr-generator', name: 'QR Generator', description: 'Render QR codes, or paste an image to decode.', category: 'generators', icon: 'QR' },
 
   // Encode pack (tools-encode.js)
   { id: 'base64', name: 'Base64', description: 'Encode or decode base64 and base64url.', category: 'encode', icon: 'b64' },
@@ -72,10 +72,10 @@ const tools = [
   { id: 'port-lookup', name: 'Port Lookup', description: 'Identify well-known TCP/UDP ports.', category: 'network', icon: ':P' },
   { id: 'mime-lookup', name: 'MIME Lookup', description: 'Map extensions to MIME types and back.', category: 'network', icon: 'M' },
   { id: 'status-code', name: 'HTTP Status Codes', description: 'Look up any HTTP status code.', category: 'network', icon: '2xx' },
-  { id: 'cookie-parser', name: 'Cookie Parser', description: 'Break down Cookie and Set-Cookie headers.', category: 'network', icon: '🍪' },
+  { id: 'cookie-parser', name: 'Cookie Parser', description: 'Break down a header, or build one from fields.', category: 'network', icon: '🍪' },
   { id: 'query-string', name: 'Query String', description: 'Decode or build URL query strings.', category: 'network', icon: '?=' },
   { id: 'curl-builder', name: 'curl Builder', description: 'Assemble a curl command from parts.', category: 'network', icon: '$' },
-  { id: 'file-signature', name: 'File Signature', description: 'Identify a file from its magic bytes.', category: 'network', icon: '⌘' },
+  { id: 'file-signature', name: 'File Signature', description: 'Identify a file, or look up a type’s magic bytes.', category: 'network', icon: '⌘' },
 
   // Security addition (tools-web.js)
   { id: 'jwt-generate', name: 'JWT Generator', description: 'Build an unsigned test JWT from JSON.', category: 'security', icon: 'JW+' }
@@ -358,6 +358,21 @@ document.addEventListener('keydown', event => {
 
 input.addEventListener('input', scheduleLiveRun);
 runButton.addEventListener('click', runActiveTool);
+
+input.addEventListener('paste', (event) => {
+  if (activeToolId !== 'qr-generator') return;
+  const item = [...(event.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  event.preventDefault();
+  const file = item.getAsFile();
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = 'decode-image:' + reader.result;
+    runActiveTool();
+  };
+  reader.onerror = () => setStatus('Could not read the pasted image from the clipboard.');
+  reader.readAsDataURL(file);
+});
 
 document.getElementById('clearTool').addEventListener('click', () => {
   input.value = '';
