@@ -367,9 +367,10 @@ input.addEventListener('paste', (event) => {
   const file = item.getAsFile();
   const reader = new FileReader();
   reader.onload = () => {
-    input.value = reader.result;
+    input.value = 'decode-image:' + reader.result;
     runActiveTool();
   };
+  reader.onerror = () => setStatus('Could not read the pasted image from the clipboard.');
   reader.readAsDataURL(file);
 });
 

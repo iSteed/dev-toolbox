@@ -323,9 +323,17 @@ function throws(fn, substr) {
     );
   });
   await checkAsync('qr-generator: decode path needs a supporting browser', async () => {
-    await run('qr-generator', 'data:image/png;base64,iVBORw0KGgo=').then(
+    await run('qr-generator', 'decode-image:data:image/png;base64,iVBORw0KGgo=').then(
       () => { throw new Error('expected an error but none was thrown'); },
       (e) => assert(e.message.includes('BarcodeDetector'), e.message)
+    );
+  });
+  await checkAsync('qr-generator: a literal data:image URL is encoded as text, not decoded', async () => {
+    const result = await run('qr-generator', 'data:image/png;base64,iVBORw0KGgo=');
+    assert(result.format === 'qr' && result.status.includes('QR version'), 'data URL encoded as QR payload: ' + result.status);
+    await run('qr-generator', 'decode-image:not-a-data-url').then(
+      () => { throw new Error('expected an error but none was thrown'); },
+      (e) => assert(e.message.includes('data:image'), e.message)
     );
   });
 

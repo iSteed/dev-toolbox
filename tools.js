@@ -1589,17 +1589,27 @@
     },
 
     async 'qr-generator'(value) {
-      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes) — or paste a data:image URL to decode a QR code from it.');
-      if (/^data:image\//i.test(input.trim())) {
+      const input = requireInput(value, 'Enter text or a URL to encode (up to ~210 bytes) — or paste a QR image to decode it.');
+      // Decode mode is explicit: the paste handler prefixes pasted images with "decode-image:".
+      // A bare data:image/... string is legitimate text and is encoded like any other.
+      if (/^decode-image:/i.test(input.trim())) {
+        const dataUrl = input.trim().replace(/^decode-image:/i, '');
+        if (!/^data:image\//i.test(dataUrl)) throw new Error('decode-image: must be followed by a data:image URL — paste a QR image into the input instead.');
         if (typeof document === 'undefined' || typeof window === 'undefined' || !('BarcodeDetector' in window)) {
           throw new Error('QR decoding needs a browser with BarcodeDetector support (Chrome, Edge, or similar) — this one does not have it.');
+        }
+        if (window.BarcodeDetector.getSupportedFormats) {
+          const formats = await window.BarcodeDetector.getSupportedFormats();
+          if (!formats.includes('qr_code')) {
+            throw new Error('This browser has BarcodeDetector but does not support the qr_code format.');
+          }
         }
         const img = new Image();
         const loaded = new Promise((resolve, reject) => {
           img.onload = resolve;
           img.onerror = () => reject(new Error('Could not load that image data.'));
         });
-        img.src = input.trim();
+        img.src = dataUrl;
         await loaded;
         const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         const results = await detector.detect(img);
