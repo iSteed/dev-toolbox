@@ -355,6 +355,26 @@ function throws(fn, substr) {
     const allStar = out(run('cron-builder', 'hour: 3'));
     assert(allStar.includes('Built from field lines: * 3 * * *'), 'missing fields default to *: ' + allStar);
   });
+  check('cron-builder: GUI form spec serializes to valid input', () => {
+    const spec = ToolKit.forms['cron-builder'];
+    assert(spec && spec.fields.length === 6, 'form spec registered');
+    assert(spec.toInput({ preset: '@daily' }) === '@daily', 'preset wins');
+    const built = spec.toInput({ preset: '', minute: '0', hour: '9', weekday: 'MON-FRI' });
+    assert(built === 'minute: 0\nhour: 9\nweekday: MON-FRI', built);
+    assert(out(run('cron-builder', built)).includes('Built from field lines: 0 9 * * MON-FRI'), 'form output runs');
+    assert(out(run('cron-builder', spec.toInput({}))).includes('* * * * *') || out(run('cron-builder', spec.toInput({}))).includes('every minute'), 'empty form still runs');
+  });
+  check('cron-builder: GUI form fromInput hydrates and round-trips', () => {
+    const spec = ToolKit.forms['cron-builder'];
+    const v = spec.fromInput('minute: 30\nhour: 9');
+    assert(v.minute === '30' && v.hour === '9' && v.weekday === '', JSON.stringify(v));
+    assert(spec.toInput({ ...v, weekday: 'MON-FRI' }) === 'minute: 30\nhour: 9\nweekday: MON-FRI', 'edit keeps existing fields');
+    assert(spec.fromInput('@daily').preset === '@daily', 'macro maps to preset');
+    const expr = spec.fromInput('*/15 9-17 * * MON-FRI');
+    assert(expr.minute === '*/15' && expr.hour === '9-17' && expr.day === '' && expr.weekday === 'MON-FRI', JSON.stringify(expr));
+    assert(spec.fromInput('').minute === '', 'empty input -> blank form');
+    assert(spec.fromInput('min: 5\ndow: SUN').minute === '5' && spec.fromInput('min: 5\ndow: SUN').weekday === 'SUN', 'aliases hydrate');
+  });
   check('cron-builder: field-line validation', () => {
     throws(() => run('cron-builder', 'minute: 0\nhours: 9'), 'Unknown cron field');
     throws(() => run('cron-builder', 'minute: 0\nmin: 30'), 'more than once');

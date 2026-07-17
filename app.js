@@ -137,6 +137,9 @@ const swapButton = document.getElementById('swapOutput');
 const copyButton = document.getElementById('copyOutput');
 const themeToggle = document.getElementById('themeToggle');
 const seam = document.querySelector('.seam');
+const guiToggle = document.getElementById('guiToggle');
+const guiForm = document.getElementById('guiForm');
+let guiOn = false;
 
 function activeTool() {
   return tools.find(tool => tool.id === activeToolId);
@@ -280,6 +283,8 @@ function openTool(id) {
   input.value = ToolKit.examples[id] ?? '';
   input.placeholder = ToolKit.placeholders[id] ?? 'Paste input here';
   document.body.classList.remove('running');
+  guiToggle.hidden = !guiSpec(id);
+  setGuiMode(false);
 
   if (isManual(id)) {
     showIdle('Press run when ready.');
@@ -290,6 +295,115 @@ function openTool(id) {
   }
   renderList();
 }
+
+/* ---------- GUI form mode ---------- */
+
+function guiSpec(id = activeToolId) {
+  return (ToolKit.forms || {})[id];
+}
+
+function guiValues() {
+  const values = {};
+  // Disabled controls are excluded so stale slave-field values never serialize.
+  for (const el of guiForm.querySelectorAll('[data-key]')) {
+    if (!el.disabled) values[el.dataset.key] = el.value;
+  }
+  return values;
+}
+
+function guiApplyDisables(spec, values) {
+  // A field with a value can disable others (e.g. a preset overrides the detail fields).
+  for (const [master, slaves] of Object.entries(spec.disables || {})) {
+    const active = !!(values[master] || '').trim();
+    for (const key of slaves) {
+      const el = guiForm.querySelector(`[data-key="${key}"]`);
+      if (el) el.disabled = active;
+    }
+  }
+}
+
+function guiSync() {
+  const spec = guiSpec();
+  if (!spec) return;
+  const values = guiValues();
+  guiApplyDisables(spec, values);
+  input.value = spec.toInput(values);
+  if (isManual()) setStatus('Input updated — press run.');
+  else scheduleLiveRun();
+}
+
+// Populate the form controls from the current text input, so the form always
+// shows what the runner will actually receive.
+function guiHydrate() {
+  const spec = guiSpec();
+  if (!guiOn || !spec) return;
+  const values = spec.fromInput ? spec.fromInput(input.value) : {};
+  for (const el of guiForm.querySelectorAll('[data-key]')) {
+    el.value = values[el.dataset.key] ?? '';
+  }
+  guiApplyDisables(spec, values);
+}
+
+function renderGuiForm() {
+  const spec = guiSpec();
+  guiForm.innerHTML = '';
+  if (!spec) return;
+  if (spec.intro) {
+    const p = document.createElement('p');
+    p.className = 'gui-intro';
+    p.textContent = spec.intro;
+    guiForm.appendChild(p);
+  }
+  for (const field of spec.fields) {
+    const row = document.createElement('label');
+    row.className = 'gui-row';
+    const name = document.createElement('span');
+    name.textContent = field.label;
+    let control;
+    if (field.type === 'select') {
+      control = document.createElement('select');
+      for (const [value, label] of field.options) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = label;
+        control.appendChild(opt);
+      }
+    } else {
+      control = document.createElement('input');
+      control.type = 'text';
+      control.placeholder = field.placeholder || '';
+      control.spellcheck = false;
+    }
+    control.dataset.key = field.key;
+    control.addEventListener('input', guiSync);
+    row.append(name, control);
+    guiForm.appendChild(row);
+  }
+}
+
+function setGuiMode(on) {
+  const wasOn = guiOn;
+  guiOn = on && !!guiSpec();
+  guiForm.hidden = !guiOn;
+  input.hidden = guiOn;
+  guiToggle.setAttribute('aria-pressed', String(guiOn));
+  guiToggle.classList.toggle('pinned', guiOn);
+  guiToggle.setAttribute('aria-expanded', String(guiOn));
+  if (guiOn) {
+    // Render, hydrate from the existing input, then serialize back so form,
+    // input, and output agree from the first frame. Skipped when hydration
+    // couldn't represent a non-empty input (e.g. unparseable text) — syncing
+    // then would overwrite it with a blank form.
+    renderGuiForm();
+    guiHydrate();
+    const hydrated = Object.values(guiValues()).some(v => (v || '').trim());
+    if (hydrated || !input.value.trim()) guiSync();
+  } else if (wasOn) {
+    input.focus();
+  }
+}
+
+guiToggle.addEventListener('click', () => setGuiMode(!guiOn));
 
 /* ---------- theme ---------- */
 
@@ -378,13 +492,15 @@ document.getElementById('clearTool').addEventListener('click', () => {
   input.value = '';
   runCounter++;
   clearTimeout(liveTimer);
+  guiHydrate();
   showIdle(isManual() ? 'Press run when ready.' : 'Paste input on the left — results appear as you type.');
   setStatus('Cleared.');
-  input.focus();
+  if (!guiOn) input.focus();
 });
 
 document.getElementById('loadExample').addEventListener('click', () => {
   input.value = ToolKit.examples[activeToolId] ?? '';
+  guiHydrate();
   if (isManual()) setStatus('Example loaded — press run.');
   else runActiveTool();
 });
@@ -392,6 +508,7 @@ document.getElementById('loadExample').addEventListener('click', () => {
 swapButton.addEventListener('click', () => {
   if (swapButton.disabled) return;
   input.value = output.textContent;
+  guiHydrate();
   setStatus('Output moved to input.');
   if (!isManual()) runActiveTool();
   else showIdle('Press run when ready.');

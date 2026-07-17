@@ -54,10 +54,12 @@
           <div class="pane-head">
             <span class="pane-label">Input</span>
             <span class="pane-tools">
+              <button id="guiToggle" class="text-button" hidden aria-pressed="false" aria-expanded="false" aria-controls="guiForm" title="Fill in a form instead of typing">⌸ Form</button>
               <button id="loadExample" class="text-button">Example</button>
               <button id="clearTool" class="text-button">Clear</button>
             </span>
           </div>
+          <div id="guiForm" class="gui-form" hidden></div>
           <textarea id="toolInput" spellcheck="false" placeholder="Paste input here"></textarea>
         </div>
 

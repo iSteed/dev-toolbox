@@ -1836,8 +1836,73 @@
     'qr-generator': 'Text or URL to encode as a QR code — or paste/screenshot a QR image to decode it…'
   };
 
+  // ---------------------------------------------------------------- GUI forms
+  // Tools listed here get a "Form" toggle in the input pane. Each spec renders
+  // controls whose values are serialized by toInput() into the tool's normal
+  // text input, so the form is just another way to type — the runner is unchanged.
+  const forms = {
+    'cron-builder': {
+      intro: 'Pick a preset, or fill in fields — anything left blank means "every".',
+      fields: [
+        {
+          key: 'preset', label: 'Preset', type: 'select',
+          options: [
+            ['', 'Custom…'],
+            ['@hourly', 'Hourly (on the hour)'],
+            ['@daily', 'Daily (midnight)'],
+            ['@weekly', 'Weekly (Sun midnight)'],
+            ['@monthly', 'Monthly (1st, midnight)'],
+            ['@yearly', 'Yearly (Jan 1, midnight)']
+          ]
+        },
+        { key: 'minute', label: 'Minute', placeholder: '0-59, */15, 0,30 …' },
+        { key: 'hour', label: 'Hour', placeholder: '0-23, 9-17 …' },
+        { key: 'day', label: 'Day of month', placeholder: '1-31' },
+        { key: 'month', label: 'Month', placeholder: '1-12 or JAN-DEC' },
+        { key: 'weekday', label: 'Weekday', placeholder: 'SUN, MON-FRI …' }
+      ],
+      // Preset wins; otherwise emit field lines for whatever was filled in.
+      toInput(v) {
+        if (v.preset) return v.preset;
+        const lines = [];
+        for (const key of ['minute', 'hour', 'day', 'month', 'weekday']) {
+          if ((v[key] || '').trim()) lines.push(`${key}: ${v[key].trim()}`);
+        }
+        return lines.length ? lines.join('\n') : 'minute: *';
+      },
+      // Hydrate controls from the current text input so opening the form
+      // (or Clear/Example while it's open) never diverges from the runner's input.
+      fromInput(text) {
+        const v = { preset: '', minute: '', hour: '', day: '', month: '', weekday: '' };
+        const trimmed = (text || '').trim();
+        if (!trimmed) return v;
+        if (this.fields[0].options.some(([value]) => value && value === trimmed)) {
+          v.preset = trimmed;
+          return v;
+        }
+        const aliases = { minute: 'minute', min: 'minute', hour: 'hour', day: 'day', dom: 'day', month: 'month', mon: 'month', weekday: 'weekday', dow: 'weekday', wday: 'weekday' };
+        const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.every(l => aliases[l.slice(0, l.indexOf(':')).trim().toLowerCase()])) {
+          for (const line of lines) {
+            const idx = line.indexOf(':');
+            const key = aliases[line.slice(0, idx).trim().toLowerCase()];
+            const val = line.slice(idx + 1).trim();
+            if (key && val && val !== '*') v[key] = val;
+          }
+          return v;
+        }
+        const parts = lines[0].split(/\s+/);
+        if (parts.length === 5) {
+          [v.minute, v.hour, v.day, v.month, v.weekday] = parts.map(p => (p === '*' ? '' : p));
+        }
+        return v;
+      },
+      disables: { preset: ['minute', 'hour', 'day', 'month', 'weekday'] }
+    }
+  };
+
   const ToolKit = {
-    runners, examples, placeholders, yamlParse, yamlStringify,
+    runners, examples, placeholders, forms, yamlParse, yamlStringify,
     // Shared helpers for the add-on tool packs (tools-encode.js, tools-web.js).
     helpers: { splitTwo, requireInput, alignTable, truncate, pad, humanDuration, relativeTime, parseCSV, detectDelimiter, bytesToHex, decodeBase64Url, SEPARATOR }
   };
