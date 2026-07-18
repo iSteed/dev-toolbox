@@ -1047,6 +1047,95 @@
       };
     },
 
+    'data-generator'(value) {
+      const input = requireInput(value, 'Describe the data: "rows: 5", "format: json|csv|sql", then "fields: name, email, uuid, int, date"…');
+      const FIRST = ['Ada', 'Grace', 'Alan', 'Edsger', 'Barbara', 'Donald', 'Margaret', 'Dennis', 'Radia', 'Linus', 'Katherine', 'Guido', 'Bjarne', 'Frances', 'Ken'];
+      const LAST = ['Lovelace', 'Hopper', 'Turing', 'Dijkstra', 'Liskov', 'Knuth', 'Hamilton', 'Ritchie', 'Perlman', 'Torvalds', 'Johnson', 'Rossum', 'Stroustrup', 'Allen', 'Thompson'];
+      const WORDS = ['alpha', 'bravo', 'copper', 'delta', 'ember', 'fable', 'gale', 'harbor', 'iris', 'juniper', 'krypton', 'lumen', 'meadow', 'nova', 'onyx', 'pixel', 'quartz', 'ridge', 'slate', 'tundra'];
+      const CITIES = ['London', 'Tokyo', 'Austin', 'Berlin', 'Oslo', 'Lagos', 'Lima', 'Seoul', 'Denver', 'Porto', 'Zagreb', 'Perth'];
+      const rand = (n) => Math.floor(Math.random() * n);
+      const pick = (arr) => arr[rand(arr.length)];
+      const randomDate = () => {
+        const d = new Date(Date.now() - rand(5 * 365 * 24 * 3600 * 1000));
+        return d.toISOString().slice(0, 10);
+      };
+      const GENERATORS = {
+        id: (i) => i + 1,
+        int: () => rand(10000),
+        float: () => Math.round(Math.random() * 100000) / 100,
+        bool: () => Math.random() < 0.5,
+        uuid: () => crypto.randomUUID(),
+        name: () => `${pick(FIRST)} ${pick(LAST)}`,
+        first_name: () => pick(FIRST),
+        last_name: () => pick(LAST),
+        email: () => `${pick(FIRST).toLowerCase()}.${pick(LAST).toLowerCase()}${rand(99)}@example.com`,
+        word: () => pick(WORDS),
+        city: () => pick(CITIES),
+        date: () => randomDate(),
+        timestamp: () => Date.now() - rand(5 * 365 * 24 * 3600 * 1000),
+        ip: () => `${rand(223) + 1}.${rand(256)}.${rand(256)}.${rand(256)}`,
+        url: () => `https://${pick(WORDS)}.example.com/${pick(WORDS)}`,
+        phone: () => `555-${String(rand(10000)).padStart(4, '0')}`,
+        price: () => (rand(99900) + 100) / 100
+      };
+      let rows = 5, format = 'json', fieldSpec = 'id, name, email', tableName = 'data';
+      const shorthand = input.trim().match(/^(\d+)\s*(json|csv|sql)?\s*$/i);
+      if (shorthand) {
+        rows = Number(shorthand[1]);
+        if (rows < 1 || rows > 1000) throw new Error('rows must be from 1 to 1000.');
+        if (shorthand[2]) format = shorthand[2].toLowerCase();
+      } else {
+        for (const raw of input.split('\n')) {
+          const line = raw.trim();
+          if (!line) continue;
+          const idx = line.indexOf(':');
+          if (idx === -1) throw new Error(`Line "${truncate(line, 30)}" is not "option: value". Known: rows, format, fields, table.`);
+          const key = line.slice(0, idx).trim().toLowerCase();
+          const val = line.slice(idx + 1).trim();
+          if (key === 'rows') {
+            if (!/^\d+$/.test(val) || +val < 1 || +val > 1000) throw new Error('rows must be a number from 1 to 1000.');
+            rows = +val;
+          } else if (key === 'format') {
+            if (!/^(json|csv|sql)$/i.test(val)) throw new Error('format must be json, csv, or sql.');
+            format = val.toLowerCase();
+          } else if (key === 'fields') {
+            fieldSpec = val;
+          } else if (key === 'table') {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(val)) throw new Error('table must be a plain identifier.');
+            tableName = val;
+          } else {
+            throw new Error(`Unknown option "${key}". Known: rows, format, fields, table.`);
+          }
+        }
+      }
+      const fields = fieldSpec.split(',').map(f => f.trim()).filter(Boolean);
+      if (!fields.length) throw new Error('fields: needs at least one field name.');
+      const columns = fields.map(f => {
+        const type = f.toLowerCase().replace(/[^a-z_]/g, '');
+        if (!GENERATORS[type]) throw new Error(`Unknown field type "${f}". Known: ${Object.keys(GENERATORS).join(', ')}.`);
+        return { name: f, gen: GENERATORS[type] };
+      });
+      const data = Array.from({ length: rows }, (_, i) => {
+        const row = {};
+        for (const col of columns) row[col.name] = col.gen(i);
+        return row;
+      });
+      let output;
+      if (format === 'json') output = JSON.stringify(data, null, 2);
+      else if (format === 'csv') {
+        const esc = (v) => /[",\n\r]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+        output = [fields.map(esc).join(','), ...data.map(row => fields.map(f => esc(row[f])).join(','))].join('\n');
+      } else {
+        const idRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+        for (const f of fields) {
+          if (!idRe.test(f)) throw new Error(`Field name "${f}" must be a plain identifier for SQL output — rename it, or use json/csv instead.`);
+        }
+        const esc = (v) => typeof v === 'number' || typeof v === 'boolean' ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
+        output = data.map(row => `INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${fields.map(f => esc(row[f])).join(', ')});`).join('\n');
+      }
+      return { output, status: `${rows} row(s) of ${format.toUpperCase()} with fields: ${fields.join(', ')}.` };
+    },
+
     'env-validator'(value) {
       const input = requireInput(value, 'Paste a .env file — or two files separated by a line with only --- to diff their keys.');
       const parseEnv = (text, label) => {
@@ -1286,6 +1375,7 @@
     'curl-builder': 'POST https://api.example.com/v1/tools\nContent-Type: application/json\nAuthorization: Bearer TOKEN\nbody: {"name":"json-formatter"}',
     'jwt-generate': '{"sub":"1234567890","name":"Dev Toolbox","admin":true,"iat":1516239022,"exp":1893456000}',
     'reverse-dns': '1.1.1.1',
+    'data-generator': 'rows: 5\nformat: json\nfields: id, name, email, city, date, bool',
     'env-validator': 'DATABASE_URL=postgres://localhost/dev\nAPI_KEY = abc123\nDEBUG=true\nDEBUG=false\nMESSAGE=hello world',
     'semver-compare': 'range: ^2.3.0\n2.2.9\n2.3.4\nv2.10.0-rc.1\n2.10.0\n3.0.0',
     'chmod-calculator': '4755'
@@ -1317,6 +1407,7 @@
     'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
     'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…',
+    'data-generator': '"rows: 10", "format: json|csv|sql", "fields: id, name, email, uuid, int, date" — or just "20 csv"…',
     'env-validator': 'Paste a .env file — or two files separated by --- to diff their keys…',
     'semver-compare': 'Versions one per line — optional first line "range: ^2.3.0" to test against…',
     'chmod-calculator': 'Octal like 755 or 4644, symbolic like rwxr-xr-x, or a chmod command…'
