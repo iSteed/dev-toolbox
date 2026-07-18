@@ -1063,9 +1063,10 @@
           const [r, w, x] = sym.slice(c * 3, c * 3 + 3);
           if (r !== 'r' && r !== '-') throw new Error(`Position ${c * 3 + 1} must be "r" or "-", got "${r}".`);
           if (w !== 'w' && w !== '-') throw new Error(`Position ${c * 3 + 2} must be "w" or "-", got "${w}".`);
+          const allowedX = c < 2 ? ['x', 's', 'S', '-'] : ['x', 't', 'T', '-'];
+          if (!allowedX.includes(x)) throw new Error(`Position ${c * 3 + 3} must be one of ${allowedX.join(' ')}, got "${x}".`);
           let n = (r === 'r' ? 4 : 0) + (w === 'w' ? 2 : 0);
           if (x === 'x' || x === 's' || x === 't') n += 1;
-          else if (x !== '-' && x !== 'S' && x !== 'T') throw new Error(`Position ${c * 3 + 3} must be one of x s S t T -, got "${x}".`);
           if (c < 2 && (x === 's' || x === 'S')) bits[0] += c === 0 ? 4 : 2; // setuid / setgid
           if (c === 2 && (x === 't' || x === 'T')) bits[0] += 1;             // sticky
           bits[c + 1] = n;

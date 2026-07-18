@@ -362,6 +362,8 @@ function throws(fn, substr) {
     assert(out(run('chmod-calculator', '777')).includes('world-writable'), 'warns on world-writable');
     throws(() => run('chmod-calculator', '999'), 'neither octal');
     throws(() => run('chmod-calculator', 'rwxrwx'), 'neither octal');
+    throws(() => run('chmod-calculator', 'rwxr-xrws'), 'must be one of x t T -');
+    throws(() => run('chmod-calculator', 'rwtr-xr-x'), 'must be one of x s S -');
   });
   check('curl-builder: assembles command', () => {
     const r = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
