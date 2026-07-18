@@ -411,6 +411,9 @@ textarea, .output {
 textarea:focus { outline: none; border-color: var(--accent); }
 
 /* GUI form mode — an alternate, form-based way to fill the input pane */
+/* display:flex would otherwise beat the UA's [hidden]{display:none} rule */
+.gui-form[hidden] { display: none; }
+
 .gui-form {
   flex: 1;
   min-height: 0;
