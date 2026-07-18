@@ -13,3 +13,6 @@ __pycache__/
 # Local scratch / probes
 __*.html
 *.log
+
+# Dependencies
+node_modules/
