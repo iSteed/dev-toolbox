@@ -69,6 +69,7 @@ const tools = [
   // Network additions (tools-web.js)
   { id: 'ip-calculator', name: 'IP Calculator', description: 'Convert an IPv4 to int, hex, binary, IPv6.', category: 'network', icon: 'IP' },
   { id: 'reverse-dns', name: 'Reverse DNS', description: 'Look up the PTR record for an IPv4.', category: 'network', icon: 'PTR' },
+  { id: 'env-validator', name: '.env Validator', description: 'Lint env files and diff two of them.', category: 'devops', icon: '.env' },
   { id: 'semver-compare', name: 'SemVer Comparator', description: 'Sort versions and test npm-style ranges.', category: 'devops', icon: '^2.3' },
   { id: 'chmod-calculator', name: 'chmod Calculator', description: 'Convert octal ↔ symbolic permissions.', category: 'devops', icon: '755' },
   { id: 'port-lookup', name: 'Port Lookup', description: 'Identify well-known TCP/UDP ports.', category: 'network', icon: ':P' },

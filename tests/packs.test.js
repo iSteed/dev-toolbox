@@ -349,6 +349,29 @@ function throws(fn, substr) {
     assert(out(run('query-string', 'q=dev toolbox\npage=2')).includes('q=dev+toolbox'), 'build: ' + out(run('query-string', 'q=dev toolbox\npage=2')));
   });
 
+  check('env-validator: catches common mistakes', () => {
+    const r = out(run('env-validator', 'GOOD=1\nAPI_KEY = spaced\n2BAD=x\nDUP=a\nDUP=b\nQUOTE="unclosed\nSPACED=hello world\nEMPTY='));
+    assert(r.includes('Whitespace around the key "API_KEY"'), 'key whitespace: ' + r);
+    assert(r.includes('not a valid variable name'), 'invalid name');
+    assert(r.includes('Duplicate key "DUP"') && r.includes('line 4'), 'duplicate with first line');
+    assert(r.includes('unclosed quote'), 'unclosed quote');
+    assert(r.includes('unquoted value containing spaces'), 'unquoted spaces');
+    assert(r.includes('"EMPTY" is set but empty'), 'empty value');
+    const clean = out(run('env-validator', 'A=1\nB="two words"\n# comment\nexport C=3'));
+    assert(clean.includes('\u2713 3 variable(s), no issues'), 'clean file: ' + clean);
+  });
+  check('env-validator: diffs two files', () => {
+    const r = out(run('env-validator', 'A=1\nB=2\n---\nB=2\nC=3'));
+    assert(r.includes('Only in A') && r.includes('- A'), 'missing from B');
+    assert(r.includes('Only in B') && r.includes('- C'), 'missing from A');
+  });
+  check('env-validator: rejects more than two files instead of dropping the extra', () => {
+    throws(() => run('env-validator', 'A=1\n---\nB=2\n---\nC=3'), '"---" separators');
+  });
+  check('env-validator: CRLF line endings do not trigger false trailing-whitespace warnings', () => {
+    const r = out(run('env-validator', 'A=1\r\nB=2\r\nC=3\r\n'));
+    assert(r.includes('✓ 3 variable(s), no issues'), 'CRLF clean file: ' + r);
+  });
   check('semver-compare: sorting and prerelease precedence', () => {
     const r = out(run('semver-compare', '2.0.0\n2.0.0-rc.1\n2.0.0-rc.2\n2.0.0-alpha\n1.9.9'));
     const order = r.split('\n').filter(l => l.startsWith('  ')).map(l => l.trim());
@@ -435,7 +458,7 @@ function throws(fn, substr) {
   });
 
   // ---------- every new example runs clean ----------
-  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','semver-compare','chmod-calculator'];
+  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','env-validator','semver-compare','chmod-calculator'];
   for (const id of NEW_IDS) {
     await checkAsync(`example runs clean: ${id}`, async () => {
       assert(examples[id] !== undefined, 'missing example');
