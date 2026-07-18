@@ -363,12 +363,23 @@ function throws(fn, substr) {
     const short = JSON.parse(out(run('data-generator', '4 json')));
     assert(short.length === 4 && 'email' in short[0], 'shorthand with default fields');
   });
+  check('data-generator: escapes a quote-containing field name in the CSV header', () => {
+    const csv = out(run('data-generator', 'rows: 1\nformat: csv\nfields: id", name'));
+    const lines = csv.split('\n');
+    assert(lines[0] === '"id""",name', 'header escaped: ' + lines[0]);
+    assert(lines.length === 2, 'one data row: ' + csv);
+  });
+  check('data-generator: escapes single quotes in SQL string values', () => {
+    const sql = out(run('data-generator', 'rows: 20\nformat: sql\ntable: t\nfields: name'));
+    assert(sql.split('\n').every(l => (l.match(/'/g) || []).length % 2 === 0), 'balanced quotes: ' + sql);
+  });
   check('data-generator: rejects bad options', () => {
     throws(() => run('data-generator', 'rows: 0'), '1 to 1000');
     throws(() => run('data-generator', 'rows: 2\nfields: id, wizard'), 'Unknown field type');
     throws(() => run('data-generator', 'format: yaml'), 'json, csv, or sql');
     throws(() => run('data-generator', 'speed: fast'), 'Unknown option');
     throws(() => run('data-generator', 'rows: 2\nformat: sql\ntable: users; drop'), 'plain identifier');
+    throws(() => run('data-generator', 'rows: 1\nformat: sql\nfields: id", name'), 'plain identifier');
   });
   check('curl-builder: assembles command', () => {
     const r = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));

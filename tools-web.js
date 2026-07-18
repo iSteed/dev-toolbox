@@ -1123,9 +1123,13 @@
       let output;
       if (format === 'json') output = JSON.stringify(data, null, 2);
       else if (format === 'csv') {
-        const esc = (v) => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
-        output = [fields.join(','), ...data.map(row => fields.map(f => esc(row[f])).join(','))].join('\n');
+        const esc = (v) => /[",\n\r]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+        output = [fields.map(esc).join(','), ...data.map(row => fields.map(f => esc(row[f])).join(','))].join('\n');
       } else {
+        const idRe = /^[A-Za-z_][A-Za-z0-9_]*$/;
+        for (const f of fields) {
+          if (!idRe.test(f)) throw new Error(`Field name "${f}" must be a plain identifier for SQL output — rename it, or use json/csv instead.`);
+        }
         const esc = (v) => typeof v === 'number' || typeof v === 'boolean' ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
         output = data.map(row => `INSERT INTO ${tableName} (${fields.join(', ')}) VALUES (${fields.map(f => esc(row[f])).join(', ')});`).join('\n');
       }
