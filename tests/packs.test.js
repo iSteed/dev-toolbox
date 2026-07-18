@@ -365,6 +365,13 @@ function throws(fn, substr) {
     assert(r.includes('Only in A') && r.includes('- A'), 'missing from B');
     assert(r.includes('Only in B') && r.includes('- C'), 'missing from A');
   });
+  check('env-validator: rejects more than two files instead of dropping the extra', () => {
+    throws(() => run('env-validator', 'A=1\n---\nB=2\n---\nC=3'), '"---" separators');
+  });
+  check('env-validator: CRLF line endings do not trigger false trailing-whitespace warnings', () => {
+    const r = out(run('env-validator', 'A=1\r\nB=2\r\nC=3\r\n'));
+    assert(r.includes('✓ 3 variable(s), no issues'), 'CRLF clean file: ' + r);
+  });
   check('curl-builder: assembles command', () => {
     const r = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
     assert(r.includes("curl -X POST 'https://api.x.com/v1'"), 'method+url');

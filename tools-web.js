@@ -1053,8 +1053,9 @@
         const keys = new Map(); // key -> first line number
         const findings = [];
         const finding = (line, level, message) => findings.push({ line, level, message });
-        text.split('\n').forEach((raw, i) => {
+        text.split('\n').forEach((rawLine, i) => {
           const line = i + 1;
+          let raw = rawLine.replace(/\r$/, '');
           if (!raw.trim() || raw.trim().startsWith('#')) return;
           if (/^\s*export\s+/.test(raw)) raw = raw.replace(/^\s*export\s+/, '');
           const idx = raw.indexOf('=');
@@ -1086,7 +1087,10 @@
         return findings.map(f => `  [${f.level}] line ${f.line}: ${f.message}`).join('\n');
       };
       const parts = input.split(/^\s*---\s*$/m);
-      if (parts.length >= 2) {
+      if (parts.length > 2) {
+        throw new Error(`Found ${parts.length - 1} "---" separators — only two files (one separator) can be diffed at a time.`);
+      }
+      if (parts.length === 2) {
         const a = parseEnv(parts[0], 'A');
         const b = parseEnv(parts[1], 'B');
         const onlyA = [...a.keys.keys()].filter(k => !b.keys.has(k));
