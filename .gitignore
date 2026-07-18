@@ -14,7 +14,7 @@ __pycache__/
 __*.html
 *.log
 
-# Dependencies
+# Local test tooling (Playwright)
 node_modules/
 package.json
 package-lock.json
