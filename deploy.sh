@@ -11,6 +11,10 @@ aws s3 sync . "s3://${BUCKET}/" \
   --exclude ".gitignore" \
   --exclude ".DS_Store" \
   --exclude "tests/*" \
+  --exclude "node_modules/*" \
+  --exclude "package.json" \
+  --exclude "package-lock.json" \
+  --exclude "LICENSE" \
   --exclude "README.md" \
   --exclude "deploy.sh" \
   --delete

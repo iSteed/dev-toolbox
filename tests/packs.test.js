@@ -380,6 +380,22 @@ function throws(fn, substr) {
     const r = out(run('semver-compare', 'v3.2.1-beta.4'));
     assert(r.includes('major') && r.includes('3') && r.includes('beta.4'), r);
   });
+  check('chmod-calculator: octal, symbolic, special bits', () => {
+    const r = out(run('chmod-calculator', '755'));
+    assert(r.includes('rwxr-xr-x') && r.includes('chmod 755'), r);
+    const sym = out(run('chmod-calculator', 'rw-r--r--'));
+    assert(sym.includes('644'), 'symbolic -> octal: ' + sym);
+    const suid = out(run('chmod-calculator', '4755'));
+    assert(suid.includes('rwsr-xr-x') && suid.includes('setuid'), 'setuid: ' + suid);
+    assert(out(run('chmod-calculator', 'rwxr-sr-x')).includes('2755'), 'setgid from symbolic');
+    assert(out(run('chmod-calculator', '1777')).includes('sticky'), 'sticky note');
+    assert(out(run('chmod-calculator', 'chmod 600 id_rsa')).includes('rw-------'), 'chmod command parsed');
+    assert(out(run('chmod-calculator', '777')).includes('world-writable'), 'warns on world-writable');
+    throws(() => run('chmod-calculator', '999'), 'neither octal');
+    throws(() => run('chmod-calculator', 'rwxrwx'), 'neither octal');
+    throws(() => run('chmod-calculator', 'rwxr-xrws'), 'must be one of x t T -');
+    throws(() => run('chmod-calculator', 'rwtr-xr-x'), 'must be one of x s S -');
+  });
   check('curl-builder: assembles command', () => {
     const r = out(run('curl-builder', 'POST https://api.x.com/v1\nContent-Type: application/json\nbody: {"a":1}'));
     assert(r.includes("curl -X POST 'https://api.x.com/v1'"), 'method+url');
@@ -419,7 +435,7 @@ function throws(fn, substr) {
   });
 
   // ---------- every new example runs clean ----------
-  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','semver-compare'];
+  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','semver-compare','chmod-calculator'];
   for (const id of NEW_IDS) {
     await checkAsync(`example runs clean: ${id}`, async () => {
       assert(examples[id] !== undefined, 'missing example');

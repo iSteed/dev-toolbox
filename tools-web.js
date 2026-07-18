@@ -1140,6 +1140,58 @@
         if (sorted.some(v => v.pre.length)) out.push('', '• Prereleases rank below their release: 2.0.0-rc.1 < 2.0.0.');
       }
       return { output: out.join('\n'), status: range ? `${sorted.filter(v => satisfies(v, range)).length}/${sorted.length} satisfy ${range}.` : `${sorted.length} versions sorted; highest is ${sorted[sorted.length - 1].raw}.` };
+    },
+
+    'chmod-calculator'(value) {
+      const input = requireInput(value, 'Enter octal (755, 4644), symbolic (rwxr-xr-x), or a chmod command.').trim()
+        .replace(/^chmod\s+/i, '').split(/\s+/)[0];
+      const CLASSES = ['owner', 'group', 'other'];
+      let bits; // [special, owner, group, other] as numbers 0-7
+      if (/^[0-7]{3,4}$/.test(input)) {
+        const digits = input.padStart(4, '0').split('').map(Number);
+        bits = digits;
+      } else if (/^[rwxsStT-]{9,10}$/.test(input)) {
+        const sym = input.length === 10 ? input.slice(1) : input; // allow a leading file-type char like -rwxr-xr-x
+        if (sym.length !== 9) throw new Error('Symbolic mode needs exactly 9 permission characters, e.g. rwxr-xr-x.');
+        bits = [0, 0, 0, 0];
+        for (let c = 0; c < 3; c++) {
+          const [r, w, x] = sym.slice(c * 3, c * 3 + 3);
+          if (r !== 'r' && r !== '-') throw new Error(`Position ${c * 3 + 1} must be "r" or "-", got "${r}".`);
+          if (w !== 'w' && w !== '-') throw new Error(`Position ${c * 3 + 2} must be "w" or "-", got "${w}".`);
+          const allowedX = c < 2 ? ['x', 's', 'S', '-'] : ['x', 't', 'T', '-'];
+          if (!allowedX.includes(x)) throw new Error(`Position ${c * 3 + 3} must be one of ${allowedX.join(' ')}, got "${x}".`);
+          let n = (r === 'r' ? 4 : 0) + (w === 'w' ? 2 : 0);
+          if (x === 'x' || x === 's' || x === 't') n += 1;
+          if (c < 2 && (x === 's' || x === 'S')) bits[0] += c === 0 ? 4 : 2; // setuid / setgid
+          if (c === 2 && (x === 't' || x === 'T')) bits[0] += 1;             // sticky
+          bits[c + 1] = n;
+        }
+      } else {
+        throw new Error(`"${truncate(input, 20)}" is neither octal (755) nor symbolic (rwxr-xr-x).`);
+      }
+      const [special, ...perms] = bits;
+      const symbol = perms.map((n, c) => {
+        let x = n & 1 ? 'x' : '-';
+        if (c === 0 && special & 4) x = n & 1 ? 's' : 'S';
+        if (c === 1 && special & 2) x = n & 1 ? 's' : 'S';
+        if (c === 2 && special & 1) x = n & 1 ? 't' : 'T';
+        return (n & 4 ? 'r' : '-') + (n & 2 ? 'w' : '-') + x;
+      }).join('');
+      const octal = (special ? String(special) : '') + perms.join('');
+      const describe = n => [n & 4 && 'read', n & 2 && 'write', n & 1 && 'execute'].filter(Boolean).join(' + ') || 'none';
+      const rows = [['Class', 'Bits', 'Symbolic', 'Meaning']];
+      perms.forEach((n, i) => rows.push([CLASSES[i], String(n), symbol.slice(i * 3, i * 3 + 3), describe(n)]));
+      const notes = [];
+      if (special & 4) notes.push('setuid (4xxx): executes with the file owner\'s privileges.');
+      if (special & 2) notes.push('setgid (2xxx): executes with the group\'s privileges; on directories, new files inherit the group.');
+      if (special & 1) notes.push('sticky (1xxx): in a directory, only a file\'s owner can delete it (e.g. /tmp).');
+      if ((perms[2] & 2) && !notes.some(n => n.includes('world'))) notes.push('⚠ world-writable — anyone on the system can modify this.');
+      return {
+        output: alignTable(rows)
+          + `\n\nOctal:    ${octal}\nSymbolic: ${symbol}\nCommand:  chmod ${octal} <file>`
+          + (notes.length ? '\n\n' + notes.map(n => '• ' + n).join('\n') : ''),
+        status: `${octal} = ${symbol}`
+      };
     }
   };
 
@@ -1171,7 +1223,8 @@
     'curl-builder': 'POST https://api.example.com/v1/tools\nContent-Type: application/json\nAuthorization: Bearer TOKEN\nbody: {"name":"json-formatter"}',
     'jwt-generate': '{"sub":"1234567890","name":"Dev Toolbox","admin":true,"iat":1516239022,"exp":1893456000}',
     'reverse-dns': '1.1.1.1',
-    'semver-compare': 'range: ^2.3.0\n2.2.9\n2.3.4\nv2.10.0-rc.1\n2.10.0\n3.0.0'
+    'semver-compare': 'range: ^2.3.0\n2.2.9\n2.3.4\nv2.10.0-rc.1\n2.10.0\n3.0.0',
+    'chmod-calculator': '4755'
   });
 
   Object.assign(ToolKit.placeholders, {
@@ -1200,7 +1253,8 @@
     'curl-builder': 'Line 1: METHOD url · Header: value lines · body: … — or paste a curl command to parse it…',
     'jwt-generate': 'A JSON payload → an unsigned (alg=none) test JWT…',
     'reverse-dns': 'An IPv4 address to reverse-resolve via DNS-over-HTTPS…',
-    'semver-compare': 'Versions one per line — optional first line "range: ^2.3.0" to test against…'
+    'semver-compare': 'Versions one per line — optional first line "range: ^2.3.0" to test against…',
+    'chmod-calculator': 'Octal like 755 or 4644, symbolic like rwxr-xr-x, or a chmod command…'
   });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = ToolKit;
