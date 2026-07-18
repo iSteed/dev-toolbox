@@ -349,6 +349,37 @@ function throws(fn, substr) {
     assert(out(run('query-string', 'q=dev toolbox\npage=2')).includes('q=dev+toolbox'), 'build: ' + out(run('query-string', 'q=dev toolbox\npage=2')));
   });
 
+  check('semver-compare: sorting and prerelease precedence', () => {
+    const r = out(run('semver-compare', '2.0.0\n2.0.0-rc.1\n2.0.0-rc.2\n2.0.0-alpha\n1.9.9'));
+    const order = r.split('\n').filter(l => l.startsWith('  ')).map(l => l.trim());
+    assert(order.join(' ') === '1.9.9 2.0.0-alpha 2.0.0-rc.1 2.0.0-rc.2 2.0.0', order.join(' '));
+    const num = out(run('semver-compare', '1.0.0-alpha.11\n1.0.0-alpha.2'));
+    assert(num.indexOf('alpha.2') < num.indexOf('alpha.11'), 'numeric prerelease ids compare numerically');
+    throws(() => run('semver-compare', 'not-a-version\n1.0.0'), 'not a valid semver');
+  });
+  check('semver-compare: rejects malformed versions per spec', () => {
+    throws(() => run('semver-compare', '01.0.0'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-01'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-alpha.'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-..'), 'not a valid semver');
+    const buildLeadingZero = out(run('semver-compare', '1.0.0+01.build'));
+    assert(buildLeadingZero.includes('major'), 'leading zeros allowed in build metadata: ' + buildLeadingZero);
+  });
+  check('semver-compare: ranges', () => {
+    const caret = out(run('semver-compare', 'range: ^2.3.0\n2.2.9\n2.3.4\n2.10.0\n3.0.0'));
+    assert(caret.includes('\u2717  2.2.9') && caret.includes('\u2713  2.3.4') && caret.includes('\u2713  2.10.0') && caret.includes('\u2717  3.0.0'), caret);
+    assert(caret.includes('Highest satisfying: 2.10.0'), caret);
+    const tilde = out(run('semver-compare', 'range: ~1.4.2\n1.4.1\n1.4.9\n1.5.0'));
+    assert(tilde.includes('\u2717  1.4.1') && tilde.includes('\u2713  1.4.9') && tilde.includes('\u2717  1.5.0'), tilde);
+    const and = out(run('semver-compare', 'range: >=3.0.0 <5.0.0\n2.9.9\n3.0.0\n4.9.9\n5.0.0'));
+    assert(and.includes('\u2713  3.0.0') && and.includes('\u2713  4.9.9') && and.includes('\u2717  5.0.0') && and.includes('\u2717  2.9.9'), and);
+    const zero = out(run('semver-compare', 'range: ^0.2.3\n0.2.4\n0.3.0'));
+    assert(zero.includes('\u2713  0.2.4') && zero.includes('\u2717  0.3.0'), 'caret on 0.x pins minor: ' + zero);
+  });
+  check('semver-compare: single version breakdown', () => {
+    const r = out(run('semver-compare', 'v3.2.1-beta.4'));
+    assert(r.includes('major') && r.includes('3') && r.includes('beta.4'), r);
+  });
   check('chmod-calculator: octal, symbolic, special bits', () => {
     const r = out(run('chmod-calculator', '755'));
     assert(r.includes('rwxr-xr-x') && r.includes('chmod 755'), r);
@@ -404,7 +435,7 @@ function throws(fn, substr) {
   });
 
   // ---------- every new example runs clean ----------
-  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','chmod-calculator'];
+  const NEW_IDS = ['base64','url-encode','html-entities','unicode-escape','hex-text','binary-text','quoted-printable','punycode','rot13','morse-code','utf8-inspector','hex-dump','ascii-table','base-converter','roman-numerals','text-counter','line-tools','lorem-ipsum','passphrase-generator','luhn-check','id-generator','json-transform','json-merge','json-to-csv','csv-to-json','json-schema','jsonpath','xml-formatter','html-formatter','html-to-markdown','markdown-to-html','markdown-toc','sql-formatter','csv-to-insert','color-converter','contrast-checker','ip-calculator','port-lookup','mime-lookup','status-code','file-signature','cookie-parser','query-string','curl-builder','jwt-generate','semver-compare','chmod-calculator'];
   for (const id of NEW_IDS) {
     await checkAsync(`example runs clean: ${id}`, async () => {
       assert(examples[id] !== undefined, 'missing example');
