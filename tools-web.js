@@ -1050,9 +1050,22 @@
     'semver-compare'(value) {
       const input = requireInput(value, 'Versions one per line to sort — optionally a first line "range: ^2.3.0" to test them against.');
       const parse = (v) => {
-        const m = v.trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/);
-        if (!m) throw new Error(`"${truncate(v.trim(), 30)}" is not a valid semver (MAJOR.MINOR.PATCH[-prerelease][+build]).`);
-        return { major: +m[1], minor: +m[2], patch: +m[3], pre: m[4] ? m[4].split('.') : [], raw: v.trim() };
+        const trimmed = v.trim();
+        const bad = () => new Error(`"${truncate(trimmed, 30)}" is not a valid semver (MAJOR.MINOR.PATCH[-prerelease][+build]).`);
+        const m = trimmed.replace(/^v/i, '').match(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/);
+        if (!m) throw bad();
+        // SemVer §9/§10: dot-separated identifiers must be non-empty; numeric
+        // prerelease identifiers additionally must not have leading zeroes
+        // (build metadata identifiers are never compared, so that rule is
+        // §9-only).
+        for (const [group, checkLeadingZero] of [[m[4], true], [m[5], false]]) {
+          if (group === undefined) continue;
+          for (const id of group.split('.')) {
+            if (id === '') throw bad();
+            if (checkLeadingZero && /^\d+$/.test(id) && id.length > 1 && id[0] === '0') throw bad();
+          }
+        }
+        return { major: +m[1], minor: +m[2], patch: +m[3], pre: m[4] ? m[4].split('.') : [], raw: trimmed };
       };
       // SemVer §11: numeric identifiers compare numerically and rank below
       // alphanumeric ones; a version WITH a prerelease ranks below one without.

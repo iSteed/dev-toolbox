@@ -357,6 +357,14 @@ function throws(fn, substr) {
     assert(num.indexOf('alpha.2') < num.indexOf('alpha.11'), 'numeric prerelease ids compare numerically');
     throws(() => run('semver-compare', 'not-a-version\n1.0.0'), 'not a valid semver');
   });
+  check('semver-compare: rejects malformed versions per spec', () => {
+    throws(() => run('semver-compare', '01.0.0'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-01'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-alpha.'), 'not a valid semver');
+    throws(() => run('semver-compare', '1.0.0-..'), 'not a valid semver');
+    const buildLeadingZero = out(run('semver-compare', '1.0.0+01.build'));
+    assert(buildLeadingZero.includes('major'), 'leading zeros allowed in build metadata: ' + buildLeadingZero);
+  });
   check('semver-compare: ranges', () => {
     const caret = out(run('semver-compare', 'range: ^2.3.0\n2.2.9\n2.3.4\n2.10.0\n3.0.0'));
     assert(caret.includes('\u2717  2.2.9') && caret.includes('\u2713  2.3.4') && caret.includes('\u2713  2.10.0') && caret.includes('\u2717  3.0.0'), caret);
