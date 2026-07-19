@@ -7,7 +7,9 @@ DISTRIBUTION_ID="E2GLXNGXGNN6HJ"
 cd "$(dirname "$0")"
 
 aws s3 sync . "s3://${BUCKET}/" \
+  --exclude ".git" \
   --exclude ".git/*" \
+  --exclude ".github/*" \
   --exclude ".gitignore" \
   --exclude ".DS_Store" \
   --exclude "tests/*" \
