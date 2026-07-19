@@ -460,6 +460,19 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .gui-row input:disabled,
 .gui-row select:disabled { opacity: 0.45; }
 
+.gui-row.check {
+  grid-template-columns: auto 1fr;
+  cursor: pointer;
+}
+
+.gui-row.check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
 .output.error { color: var(--err); white-space: pre-wrap; }
 .output.idle { color: var(--muted); white-space: pre-wrap; }
 

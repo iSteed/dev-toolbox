@@ -310,7 +310,7 @@ function guiValues() {
   const values = {};
   // Disabled controls are excluded so stale slave-field values never serialize.
   for (const el of guiForm.querySelectorAll('[data-key]')) {
-    if (!el.disabled) values[el.dataset.key] = el.value;
+    if (!el.disabled) values[el.dataset.key] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value;
   }
   return values;
 }
@@ -343,7 +343,8 @@ function guiHydrate() {
   if (!guiOn || !spec) return;
   const values = spec.fromInput ? spec.fromInput(input.value) : {};
   for (const el of guiForm.querySelectorAll('[data-key]')) {
-    el.value = values[el.dataset.key] ?? '';
+    if (el.type === 'checkbox') el.checked = !!(values[el.dataset.key] || '').trim();
+    else el.value = values[el.dataset.key] ?? '';
   }
   guiApplyDisables(spec, values);
 }
@@ -372,6 +373,10 @@ function renderGuiForm() {
         opt.textContent = label;
         control.appendChild(opt);
       }
+    } else if (field.type === 'checkbox') {
+      control = document.createElement('input');
+      control.type = 'checkbox';
+      row.classList.add('check');
     } else {
       control = document.createElement('input');
       control.type = 'text';
@@ -379,8 +384,9 @@ function renderGuiForm() {
       control.spellcheck = false;
     }
     control.dataset.key = field.key;
-    control.addEventListener('input', guiSync);
-    row.append(name, control);
+    control.addEventListener(control.type === 'checkbox' ? 'change' : 'input', guiSync);
+    if (control.type === 'checkbox') row.append(control, name);
+    else row.append(name, control);
     guiForm.appendChild(row);
   }
 }

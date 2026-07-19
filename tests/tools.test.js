@@ -385,6 +385,27 @@ function throws(fn, substr) {
     assert(text.includes('node_modules/') && text.includes('__pycache__/') && text.includes('.DS_Store'), text.slice(0, 120));
     throws(() => run('gitignore-builder', 'cobol'), 'Unknown template');
   });
+  check('gitignore-builder: placeholder lists every supported template', () => {
+    const placeholder = ToolKit.placeholders['gitignore-builder'];
+    const text = out(run('gitignore-builder', 'node'));
+    const listed = placeholder.split(':').pop().split(',').map(s => s.trim()).filter(Boolean);
+    assert(listed.length >= 17, 'all templates listed, got ' + listed.length);
+    for (const key of listed) assert(out(run('gitignore-builder', key)).includes(`--- ${key} ---`), key + ' runs');
+    assert(text.includes('node_modules/'), 'sanity');
+  });
+  check('gitignore-builder: GUI form checkboxes round-trip', () => {
+    const spec = ToolKit.forms['gitignore-builder'];
+    assert(spec && spec.fields.length >= 17, 'one checkbox per template');
+    assert(spec.fields.every(f => f.type === 'checkbox' && f.label), 'checkbox fields with labels');
+    const built = spec.toInput({ node: '1', python: '1' });
+    assert(built === 'node, python', built);
+    assert(out(run('gitignore-builder', built)).includes('__pycache__/'), 'form output runs');
+    assert(spec.toInput({}) === '', 'empty form -> empty input');
+    const v = spec.fromInput('node, py, macos');
+    assert(v.node === '1' && v.python === '1' && v.macos === '1' && !v.rust, 'aliases hydrate: ' + JSON.stringify(v));
+    assert(spec.toInput(v) === 'node, python, macos', 'round-trip normalizes aliases');
+    assert(Object.keys(spec.fromInput('')).length === 0, 'empty input -> blank form');
+  });
 
   // ---- generators ----
   check('uuid-generator: count and format', () => {

@@ -771,6 +771,15 @@
     env: ['.env', '.env.*', '!.env.example']
   };
 
+  const GITIGNORE_ALIASES = { js: 'node', javascript: 'node', typescript: 'node', ts: 'node', py: 'python', golang: 'go', 'c++': 'cpp', csharp: 'dotnet', 'c#': 'dotnet', mac: 'macos', osx: 'macos', idea: 'jetbrains', intellij: 'jetbrains', dotfiles: 'env' };
+
+  const GITIGNORE_LABELS = {
+    node: 'Node / JavaScript', python: 'Python', go: 'Go', rust: 'Rust', java: 'Java',
+    dotnet: '.NET / C#', cpp: 'C / C++', web: 'Web build output', macos: 'macOS',
+    windows: 'Windows', linux: 'Linux', vscode: 'VS Code', jetbrains: 'JetBrains IDEs',
+    vim: 'Vim', terraform: 'Terraform', docker: 'Docker', env: '.env files'
+  };
+
   const DNS_TYPES = { A: 1, NS: 2, CNAME: 5, SOA: 6, PTR: 12, MX: 15, TXT: 16, AAAA: 28, SRV: 33, CAA: 257 };
   const DNS_TYPE_NAMES = Object.fromEntries(Object.entries(DNS_TYPES).map(([k, v]) => [v, k]));
   const DNS_STATUS = { 0: 'NOERROR', 1: 'FORMERR', 2: 'SERVFAIL', 3: 'NXDOMAIN', 4: 'NOTIMP', 5: 'REFUSED' };
@@ -1657,11 +1666,10 @@
         .toLowerCase()
         .split(/[\s,]+/)
         .filter(Boolean);
-      const aliases = { js: 'node', javascript: 'node', typescript: 'node', ts: 'node', py: 'python', golang: 'go', 'c++': 'cpp', csharp: 'dotnet', 'c#': 'dotnet', mac: 'macos', osx: 'macos', idea: 'jetbrains', intellij: 'jetbrains', dotfiles: 'env' };
       const unknown = [];
       const chosen = [];
       for (const item of requested) {
-        const key = GITIGNORE_TEMPLATES[item] ? item : aliases[item];
+        const key = GITIGNORE_TEMPLATES[item] ? item : GITIGNORE_ALIASES[item];
         if (!key) unknown.push(item);
         else if (!chosen.includes(key)) chosen.push(key);
       }
@@ -1829,7 +1837,7 @@
     'docker-linter': 'Paste a Dockerfile to lint, or "image: value" field lines to build one…',
     'compose-validator': 'Paste a docker-compose.yml to validate, or "service: name" blocks to build one…',
     'cron-builder': 'A 5-field cron expression, a macro like @daily — or minute/hour/day/month/weekday field lines…',
-    'gitignore-builder': 'Stacks to combine, e.g. node, python, macos…',
+    'gitignore-builder': `Stacks to combine — supported: ${Object.keys(GITIGNORE_TEMPLATES).join(', ')}`,
     'uuid-generator': 'How many UUIDs? (1-100, default 1)',
     'timestamp-converter': 'Unix seconds/milliseconds or an ISO date — empty for “now”…',
     'random-string': 'Length and charset, e.g. "48 hex" (alnum, hex, url, ascii, digits)…',
@@ -1898,6 +1906,22 @@
         return v;
       },
       disables: { preset: ['minute', 'hour', 'day', 'month', 'weekday'] }
+    },
+
+    'gitignore-builder': {
+      intro: 'Every supported template is listed below — tick the stacks in your project.',
+      fields: Object.keys(GITIGNORE_TEMPLATES).map(key => ({ key, label: GITIGNORE_LABELS[key] || key, type: 'checkbox' })),
+      toInput(v) {
+        return this.fields.filter(f => (v[f.key] || '').trim()).map(f => f.key).join(', ');
+      },
+      fromInput(text) {
+        const v = {};
+        for (const item of (text || '').toLowerCase().split(/[\s,]+/).filter(Boolean)) {
+          const key = GITIGNORE_TEMPLATES[item] ? item : GITIGNORE_ALIASES[item];
+          if (key) v[key] = '1';
+        }
+        return v;
+      }
     }
   };
 
