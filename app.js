@@ -104,6 +104,10 @@ const MANUAL_TOOLS = new Set([
   'passphrase-generator', 'lorem-ipsum'
 ]);
 
+// Tools whose output is a full/partial HTML document worth rendering in a tab,
+// rather than just reading as text.
+const HTML_PREVIEW_TOOLS = new Set(['markdown-to-html', 'html-formatter']);
+
 const STORAGE_KEYS = {
   favorites: 'devtoolbox.favorites',
   theme: 'devtoolbox.theme',
@@ -138,6 +142,7 @@ const status = document.getElementById('toolStatus');
 const runButton = document.getElementById('runTool');
 const favoriteButton = document.getElementById('favoriteButton');
 const swapButton = document.getElementById('swapOutput');
+const previewButton = document.getElementById('previewOutput');
 const copyButton = document.getElementById('copyOutput');
 const themeToggle = document.getElementById('themeToggle');
 const seam = document.querySelector('.seam');
@@ -223,6 +228,7 @@ function showIdle(message) {
   output.textContent = message;
   output.className = 'output idle';
   swapButton.disabled = true;
+  previewButton.disabled = true;
 }
 
 function applyResult(result) {
@@ -231,6 +237,7 @@ function applyResult(result) {
   output.textContent = text;
   output.className = `output${format === 'qr' ? ' qr' : ''}`;
   swapButton.disabled = format === 'qr' || !text;
+  previewButton.disabled = !text;
   setStatus(message || 'Done.', 'success');
 }
 
@@ -244,6 +251,7 @@ function applyError(error, inputWasEmpty) {
   output.textContent = error.message;
   output.className = 'output error';
   swapButton.disabled = true;
+  previewButton.disabled = true;
   setStatus('Check the input.', 'error');
 }
 
@@ -283,6 +291,7 @@ function openTool(id) {
   favoriteButton.textContent = favorites.has(id) ? '★' : '☆';
   favoriteButton.classList.toggle('pinned', favorites.has(id));
   seam.classList.toggle('manual', isManual(id));
+  previewButton.hidden = !HTML_PREVIEW_TOOLS.has(id);
 
   input.value = ToolKit.examples[id] ?? '';
   input.placeholder = ToolKit.placeholders[id] ?? 'Paste input here';
@@ -522,6 +531,21 @@ swapButton.addEventListener('click', () => {
   setStatus('Output moved to input.');
   if (!isManual()) runActiveTool();
   else showIdle('Press run when ready.');
+});
+
+previewButton.addEventListener('click', () => {
+  if (previewButton.disabled) return;
+  const blob = new Blob([output.textContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (!win) {
+    setStatus('Preview blocked — allow pop-ups to view rendered HTML.', 'error');
+    URL.revokeObjectURL(url);
+    return;
+  }
+  setStatus('Opened preview in a new tab.', 'success');
+  // Give the new tab time to actually fetch the blob before it's revoked.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 });
 
 copyButton.addEventListener('click', async () => {
